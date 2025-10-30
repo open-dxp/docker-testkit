@@ -1,0 +1,25 @@
+services:
+    selenium-chrome:
+        image: seleniarm/standalone-chromium:4.1.4-20220429
+        container_name: ddev-${DDEV_SITENAME}-selenium-chrome
+        expose:
+            - 7900
+        environment:
+            - VIRTUAL_HOST=$DDEV_HOSTNAME
+            - HTTPS_EXPOSE=7900:7900
+            - HTTP_EXPOSE=7910:7900
+        external_links:
+            - ddev-router:${DDEV_SITENAME}.${DDEV_TLD}
+        labels:
+            com.ddev.site-name: ${DDEV_SITENAME}
+            com.ddev.approot: $DDEV_APPROOT
+        volumes:
+            - ".:/mnt/ddev_config"
+    web:
+        links:
+            - selenium-chrome
+        environment:
+            - BROWSERTEST_OUTPUT_DIRECTORY=/tmp
+            - BROWSERTEST_OUTPUT_BASE_URL=${DDEV_PRIMARY_URL}
+            - SIMPLETEST_BASE_URL=http://web
+            - SIMPLETEST_DB=mysql://db:db@db/db

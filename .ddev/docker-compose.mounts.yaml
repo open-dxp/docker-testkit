@@ -1,0 +1,7 @@
+services:
+    web:
+        volumes:
+            - ../etc/bundle.sh:/usr/local/bin/bundle
+            - ../etc/boot-system.sh:/usr/local/bin/boot-system.sh
+            - ${TEST_BUNDLE_PATH:-/var/www}/${TEST_BUNDLE_DIR_NAME:-open-dxp/formbuilder-bundle}:/var/www/html/public/lib/test-bundle
+            - ${OPENDXP_CODECEPTION_FRAMEWORK_PATH}:/var/www/html/public/lib/opendxp-codeception-framework

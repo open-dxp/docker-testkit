@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+
+ddev exec bundle $1 "${@:2}"
