@@ -1,29 +1,36 @@
 #!/usr/bin/env bash
+
+## Description: Run OpenDXP Tests
+## Usage: opendxp-tests-dispatcher
+## Example: "ddev opdenxp-tests-dispatcher"
 set -e
 
-source /var/www/html/etc/runtime-env.sh
+APP_IP="$(ip addr show eth0 | grep 'inet\b' | awk '{print $2}' | cut -d/ -f1)"
+
+export WEBDRIVER_HOST="selenium-chrome"
+export WEBDRIVER_URL="http://$APP_IP/"
 
 while :
 do
     case "$1" in
-        tests)
+        codecept)
             echo ""
             echo "*************************************************************************"
-            echo "run tests"
+            echo "run codeception tests"
             echo "*************************************************************************"
-            cd /var/www/html/public
-            /usr/bin/php -d memory_limit=-1 vendor/bin/codecept run -c lib/test-bundle --env local "${@:2}"
+            cd /var/www/html/app
+            /usr/bin/php -d memory_limit=-1 vendor/bin/codecept run -c . --env local "${@:2}"
             cd ~-
             exit
             ;;
-        tests-xdebug)
+        codecept-xdebug)
             echo ""
             echo "*************************************************************************"
-            echo "run tests with xdebug"
+            echo "run codeception tests with xdebug"
             echo "*************************************************************************"
             echo ""
-            cd /var/www/html/public
-            PHP_IDE_CONFIG="serverName=opendxp.test" /usr/bin/php -dxdebug.remote_enable=1 -dxdebug.remote_autostart=On -dxdebug.idekey=PHPSTORM -dxdebug.remote_host=$2 -d memory_limit=-1 -d memory_limit=-1 vendor/bin/codecept run -c lib/test-bundle --env local "${@:3}"
+            cd /var/www/html/app
+            PHP_IDE_CONFIG="serverName=opendxp.test" /usr/bin/php -dxdebug.remote_enable=1 -dxdebug.remote_autostart=On -dxdebug.idekey=PHPSTORM -dxdebug.remote_host=$2 -d memory_limit=-1 -d memory_limit=-1 vendor/bin/codecept run -c . --env local "${@:3}"
             cd ~-
             exit
             ;;
@@ -33,27 +40,22 @@ do
             echo "run phpstan"
             echo "*************************************************************************"
             echo ""
-            cd /var/www/html/public
+            cd /var/www/html/app
             bin/console cache:warmup --env=test --no-optional-warmers
-            php -d memory_limit=-1 vendor/bin/phpstan analyse -c lib/test-bundle/phpstan.neon -a lib/test-bundle/tests/_phpstan-bootstrap.php lib/test-bundle/src "${@:2}"
+            php -d memory_limit=-1 vendor/bin/phpstan analyse -c phpstan.neon -a tests/_phpstan-bootstrap.php src "${@:2}"
             cd ~-
             exit
             ;;
-        ecs)
+        cs-fixer)
             echo ""
             echo "*************************************************************************"
-            echo "run ecs"
+            echo "run cs-fixer"
             echo "*************************************************************************"
-            echo ""
-            cd /var/www/html/public
-            ln -sfn /var/www/html/public/vendor lib/test-bundle/vendor
-            php -d memory_limit=-1 vendor/bin/ecs check lib/test-bundle/src --config lib/test-bundle/ecs.php "${@:2}"
-            rm -rf lib/test-bundle/vendor
-            cd ~-
+            echo "Currently not supported"
             exit
             ;;
         *)
-            echo "Usage: $(basename $0) tests|tests-enable-xdebug|tests-xdebug|phpstan|ecs [args]"
+            echo "Usage: $(basename $0) tests|tests-enable-xdebug|tests-xdebug|phpstan|cs-fixer [args]"
             exit
             ;;
     esac

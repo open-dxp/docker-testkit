@@ -13,8 +13,6 @@
 - Copy `/.ddev/.env.dist` to `/.ddev/.env`
 - Change variables to your needs
 
-> Note: set TEST_EXECUTE_COMPOSER to "true" for initial setup!
-
 Execute:
 
 ```bash

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+## Description: Run OpenDXP Tests
+## Usage: opendxp-tests-run
+## Example: "ddev opendxp-tests-run codecept"
+## ExecRaw: true
+
+set -e
+
+RUN_COMPOSER=false
+ARGS=()
+
+for arg in "$@"; do
+    case "$arg" in
+        --composer)
+            RUN_COMPOSER=true
+            ;;
+        *)
+            ARGS+=("$arg")
+            ;;
+    esac
+done
+
+_OPENDXP_CODECEPTION_FRAMEWORK_PATH='/tmp/opendxp-codeception-framework'
+_BUNDLE_PATH=$(ddev exec echo '$TEST_BUNDLE_LOCAL_PATH')
+_BUNDLE_DIR_NAME=$(ddev exec echo '$TEST_BUNDLE_DIR_NAME')
+_BUNDLE_SYNC_DIR="$_BUNDLE_PATH/$_BUNDLE_DIR_NAME"
+
+if ! ddev exec test -d "$_OPENDXP_CODECEPTION_FRAMEWORK_PATH"; then
+    echo "Error: Codeception Framework source directory does not exist: $_OPENDXP_CODECEPTION_FRAMEWORK_PATH" >&2
+    exit 1
+fi
+
+if [ ! -d "$_BUNDLE_SYNC_DIR" ]; then
+    echo "Error: Source directory does not exist: $_BUNDLE_SYNC_DIR" >&2
+    exit 1
+fi
+
+if [ ! -d "app" ]; then
+    echo "Error: TargetDirectory does not exist: app" >&2
+    exit 1
+fi
+
+rsync -av \
+    --delete \
+    --exclude="$(basename $_OPENDXP_CODECEPTION_FRAMEWORK_PATH)" \
+    --exclude="docs" \
+    --exclude="vendor" \
+    --exclude="cache" \
+    --exclude="*.md" \
+    --exclude=".git" \
+    --exclude=".gitattributes" \
+    --exclude=".gitignore" \
+    --exclude=".php-cs-fixer-finder.dist.php" \
+    "$_BUNDLE_SYNC_DIR/" \
+    "app/"
+
+ddev exec bash -c 'cd /var/www/html/app && ./.github/ci/scripts/setup-opendxp-environment.sh'
+
+if [ "$RUN_COMPOSER" = true ]; then
+    echo "run composer task..."
+    ddev opendxp-tests-composer
+fi
+
+ddev opendxp-tests-dispatcher $1 "$ARGS[@]"

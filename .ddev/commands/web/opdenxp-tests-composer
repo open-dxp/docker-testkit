@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+## Description: Run Composer in Test environment
+## Usage: opendxp-tests-composer
+## Example: "ddev opendxp-tests-composer d"
+
+cd /var/www/html/app
+
+composer update --no-progress --no-scripts
+
+./bin/console cache:clear --no-interaction
+./bin/console assets:install public --relative --symlink

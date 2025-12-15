@@ -1,2 +1,0 @@
-_opendxp_dev:
-    resource: "@OpenDxpCoreBundle/config/routing_dev.yaml"
