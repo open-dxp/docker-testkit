@@ -58,6 +58,11 @@ rsync -av \
 # copy htaccess (not required on github because we're using the symfony server there)
 cp .ddev/apache/.htaccess app/public/.htaccess
 
+# additional public statics
+if [ -d "assets-test" ]; then
+    ln -sfn ../../assets-test app/public/assets-test
+fi
+
 ddev exec bash -c 'cd /var/www/html/app && ./.github/ci/scripts/setup-opendxp-environment.sh'
 
 if [ "$RUN_COMPOSER" = true ]; then

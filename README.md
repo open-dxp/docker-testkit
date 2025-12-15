@@ -25,6 +25,11 @@ Execute:
 # use --composer for the first run to install dependencies
 $ ddev opendxp-tests-run codecept|phpstan|cs-fixer --composer --debug
 ```
+
+### Additional Test Assets
+- Create a folder `assets-test` on top level and add additional assets
+- If this folder exists, a symlink to `app/public/assets-test` will be created
+
 ## PhpStorm
 - Exclude `/.ddev`, `/app`
 
@@ -36,7 +41,7 @@ $ ddev opendxp-tests-run codecept|phpstan|cs-fixer --composer --debug
 $ ddev opendxp-tests-run phpstan -l 4
 ```
 
-### ECS
+### CS Fixer
 
 ```bash
 $ ddev opendxp-tests-run cs-fixer --fix

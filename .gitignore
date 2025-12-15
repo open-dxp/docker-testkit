@@ -44,4 +44,5 @@ node_modules
 ######################
 /data
 /app
+/assets-test
 .ddev/.env
