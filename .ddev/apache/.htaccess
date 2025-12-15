@@ -1,0 +1,72 @@
+RewriteEngine On
+RewriteCond %{HTTP_HOST}==%{HTTP_REFERER} !^(.*?)==https?://\1/admin/ [OR]
+RewriteCond %{HTTP_COOKIE} !^.*opendxp_admin_sid.*$ [NC]
+RewriteRule ^restricted-assets/.* - [F,L]
+RewriteRule ^var/.*/restricted-assets(.*) - [F,L]
+RewriteRule ^cache-buster\-[\d]+/restricted-assets(.*) - [F,L]
+
+DirectoryIndex index.php
+
+<IfModule mod_negotiation.c>
+    Options -MultiViews
+</IfModule>
+
+AddType video/mp4 .mp4
+AddType video/webm .webm
+AddType image/webp .webp
+AddType image/jpeg .pjpeg
+
+Options +SymLinksIfOwnerMatch
+
+AddDefaultCharset utf-8
+
+RewriteEngine On
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(jpe?g|png)$">
+        Header always unset X-Content-Type-Options
+    </FilesMatch>
+</IfModule>
+
+RewriteCond %{REQUEST_URI}::$1 ^(/.+)/(.*)::\2$
+RewriteRule ^(.*) - [E=BASE:%1]
+
+# Sets the HTTP_AUTHORIZATION header removed by Apache
+RewriteCond %{HTTP:Authorization} .
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+RewriteCond %{ENV:REDIRECT_STATUS} ^$
+RewriteRule ^index\.php(?:/(.*)|$) %{ENV:BASE}/$1 [R=301,L]
+
+<IfModule mod_status.c>
+    RewriteCond %{REQUEST_URI} ^/(fpm|server)-(info|status|ping)
+    RewriteRule . - [L]
+</IfModule>
+
+RewriteCond %{REQUEST_FILENAME} -d [OR]
+RewriteCond %{REQUEST_FILENAME} -l [OR]
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule /\.|^\.(?!well-known/) - [F,L]
+
+RewriteCond %{REQUEST_METHOD} ^(GET|HEAD)
+RewriteCond %{DOCUMENT_ROOT}/var/assets%{REQUEST_URI} -f
+RewriteRule ^(.*)$ /var/assets%{REQUEST_URI} [PT,L]
+
+RewriteCond %{REQUEST_URI} .*/(image|video)-thumb__[\d]+__.*
+RewriteCond %{DOCUMENT_ROOT}/var/tmp/thumbnails%{REQUEST_URI} -f
+RewriteRule ^(.*)$ /var/tmp/thumbnails%{REQUEST_URI} [PT,L]
+
+SetEnvIf Request_URI ^(.*)$ STATIC_PAGE_URI=$1
+SetEnvIf Request_URI / STATIC_PAGE_URI=/%home
+
+RewriteCond %{REQUEST_METHOD} ^(GET|HEAD)
+RewriteCond %{QUERY_STRING}   !(opendxp_editmode=true|opendxp_preview|opendxp_version)
+RewriteCond %{DOCUMENT_ROOT}/var/tmp/pages%{STATIC_PAGE_URI}.html -f
+RewriteRule ^(.*)$ /var/tmp/pages%{STATIC_PAGE_URI}.html [PT,L]
+
+RewriteRule ^cache-buster\-[\d]+/(.*) $1 [PT,L]
+
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+RewriteRule ^ %{ENV:BASE}/index.php [L]

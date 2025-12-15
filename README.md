@@ -22,7 +22,8 @@ $ ddev start
 Execute: 
 
 ```bash
-$ ddev opendxp-tests-run codecept|phpstan|cs-fixer --composer
+# use --composer for the first run to install dependencies
+$ ddev opendxp-tests-run codecept|phpstan|cs-fixer --composer --debug
 ```
 ## PhpStorm
 - Exclude `/.ddev`, `/app`
