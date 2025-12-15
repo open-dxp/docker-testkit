@@ -62,4 +62,4 @@ if [ "$RUN_COMPOSER" = true ]; then
     ddev opendxp-tests-composer
 fi
 
-ddev opendxp-tests-dispatcher $1 "$ARGS[@]"
+ddev opendxp-tests-dispatcher ${ARGS[@]}
