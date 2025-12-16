@@ -36,6 +36,7 @@ web_environment:
     - SYMFONY_DEPRECATIONS_HELPER=weak
 
     - OPENDXP_PROJECT_ROOT=/var/www/html/app
+    - OPENDXP_CLASS_DIRECTORY=/var/www/html/app/var/classes
     - OPENDXP_CODECEPTION_FRAMEWORK_PATH=/tmp/opendxp-codeception-framework
 
     - WEBDRIVER_DOWNLOAD_PATH=/home/seluser/Downloads
