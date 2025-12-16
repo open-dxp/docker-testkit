@@ -69,7 +69,8 @@ if [ ! -f "GeoLite2-City.mmdb" ]; then
     gunzip GeoLite2-City.mmdb.gz
 fi
 
-cp GeoLite2-City.mmdb app/config/GeoLite2-City.mmdb
+mkdir -p app/var/config
+cp GeoLite2-City.mmdb app/var/config/GeoLite2-City.mmdb
 
 ddev exec bash -c 'cd /var/www/html/app && ./.github/ci/scripts/setup-opendxp-environment.sh'
 
