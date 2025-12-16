@@ -46,3 +46,5 @@ node_modules
 /app
 /assets-test
 .ddev/.env
+GeoLite2-City.mmdb.gz
+GeoLite2-City.mmdb

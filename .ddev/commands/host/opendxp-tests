@@ -63,6 +63,14 @@ if [ -d "assets-test" ]; then
     ln -sfn ../../assets-test app/public/assets-test
 fi
 
+## geolite ip
+if [ ! -f "GeoLite2-City.mmdb" ]; then
+    wget -c https://raw.githubusercontent.com/wp-statistics/GeoLite2-City/master/GeoLite2-City.mmdb.gz -O GeoLite2-City.mmdb.gz
+    gunzip GeoLite2-City.mmdb.gz
+fi
+
+cp GeoLite2-City.mmdb app/config/GeoLite2-City.mmdb
+
 ddev exec bash -c 'cd /var/www/html/app && ./.github/ci/scripts/setup-opendxp-environment.sh'
 
 if [ "$RUN_COMPOSER" = true ]; then
