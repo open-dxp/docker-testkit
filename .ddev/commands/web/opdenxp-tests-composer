@@ -6,6 +6,20 @@
 
 cd /var/www/html/app
 
+if jq -e '.suggest' composer.json > /dev/null; then
+
+    packages=$(jq -r '.suggest | to_entries | map("\(.key):\(.value)") | join(" ")' composer.json)
+
+    if [ -n "$packages" ]; then
+        composer require $packages -W --no-progress --no-update
+    else
+        echo "No packages found in the suggest section."
+    fi
+else
+    echo "No suggest section found in composer.json."
+fi
+
+
 composer update --no-progress --no-scripts
 
 ./bin/console cache:clear --no-interaction
