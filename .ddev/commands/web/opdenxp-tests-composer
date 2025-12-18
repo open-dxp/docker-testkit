@@ -19,7 +19,19 @@ else
     echo "No suggest section found in composer.json."
 fi
 
+## Set Dynamic Search Dependency to branch alias (@todo: not here!)
+#sed -i 's,\("open-dxp\/dynamic-search-bundle"\): "\(.*\)",\1: "1.x-dev",g' composer.json
 
+## Set Composer Root Version (@todo)
+#export COMPOSER_ROOT_VERSION=1.x-dev
+
+## Configure Composer Auth
+export COMPOSER_AUTH="{\"github-oauth\": {\"github.com\": \"$GITHUB_PRIVATE_ACCESS_TOKEN\"}}"
+
+## Add Repman Repository Link
+composer config repositories.opendxp '{"type": "composer", "url": "https://open-dxp.repo.repman.io"}' --file composer.json
+
+## Update Composer Dependencies
 composer update --no-progress --no-scripts
 
 ./bin/console cache:clear --no-interaction

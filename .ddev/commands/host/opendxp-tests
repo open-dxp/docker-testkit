@@ -55,6 +55,9 @@ rsync -av \
     "$_BUNDLE_SYNC_DIR/" \
     "app/"
 
+
+ddev exec bash -c 'cd /var/www/html/app && ./.github/ci/scripts/setup-opendxp-environment.sh'
+
 # copy htaccess (not required on github because we're using the symfony server there)
 cp .ddev/apache/.htaccess app/public/.htaccess
 
@@ -71,8 +74,6 @@ fi
 
 mkdir -p app/var/config
 cp GeoLite2-City.mmdb app/var/config/GeoLite2-City.mmdb
-
-ddev exec bash -c 'cd /var/www/html/app && ./.github/ci/scripts/setup-opendxp-environment.sh'
 
 if [ "$RUN_COMPOSER" = true ]; then
     echo "run composer task..."
