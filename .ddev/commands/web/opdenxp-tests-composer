@@ -33,6 +33,8 @@ composer config repositories.opendxp '{"type": "composer", "url": "https://open-
 
 ## Update Composer Dependencies
 composer update --no-progress --no-scripts
+# composer update --no-progress --no-scripts --prefer-lowest
+
 
 ./bin/console cache:clear --no-interaction
 ./bin/console assets:install public --relative --symlink

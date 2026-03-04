@@ -41,8 +41,9 @@ do
             echo "*************************************************************************"
             echo ""
             cd /var/www/html/app
+            ## todo: cache:warmup should be optional (flag)
             bin/console cache:warmup --env=test --no-optional-warmers
-            php -d memory_limit=-1 vendor/bin/phpstan analyse -c phpstan.neon -a tests/_phpstan-bootstrap.php src "${@:2}"
+            php -d memory_limit=-1 vendor/bin/phpstan analyse -c phpstan.neon "${@:2}"
             cd ~-
             exit
             ;;

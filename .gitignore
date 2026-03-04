@@ -48,3 +48,6 @@ node_modules
 .ddev/.env
 GeoLite2-City.mmdb.gz
 GeoLite2-City.mmdb
+
+# AI
+/mcp-server/node_modules
