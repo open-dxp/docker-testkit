@@ -8,7 +8,7 @@ cd /var/www/html/app
 
 if jq -e '.suggest' composer.json > /dev/null; then
 
-    packages=$(jq -r '.suggest | to_entries | map("\(.key):\(.value)") | join(" ")' composer.json)
+    packages=$(jq -r '.suggest | to_entries | map(select((.key | startswith("ext-") | not) and (.value | test("^[0-9^~>=<!*@][0-9.*^~>=<!*| ,@-]*$")))) | map("\(.key):\(.value)") | join(" ")' composer.json)
 
     if [ -n "$packages" ]; then
         composer require $packages -W --no-progress --no-update
@@ -34,7 +34,6 @@ composer config repositories.opendxp '{"type": "composer", "url": "https://open-
 ## Update Composer Dependencies
 composer update --no-progress --no-scripts
 # composer update --no-progress --no-scripts --prefer-lowest
-
 
 ./bin/console cache:clear --no-interaction
 ./bin/console assets:install public --relative --symlink
