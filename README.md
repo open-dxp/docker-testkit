@@ -142,4 +142,4 @@ The MCP server provides the following tools:
 | `run_codeception` | Runs Codeception tests (optionally with `--debug` or `--composer`) |
 | `run_phpstan`     | Runs PHPStan at a configurable level                               |
 
-For a full walkthrough see: [Testing with AI (Claude)](https://github.com/open-dxp/opendxp/doc/19_Development_Tools_and_Details/50_Testing_with_AI.md)
+For a full walkthrough see: [Testing with AI (Claude)](https://github.com/open-dxp/opendxp/blob/1.x/doc/19_Development_Tools_and_Details/50_Testing_with_AI.md)
