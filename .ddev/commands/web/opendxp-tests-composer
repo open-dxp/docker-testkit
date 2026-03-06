@@ -2,7 +2,14 @@
 
 ## Description: Run Composer in Test environment
 ## Usage: opendxp-tests-composer
-## Example: "ddev opendxp-tests-composer d"
+## Example: "ddev opendxp-tests-composer"
+
+PREFER_LOWEST=false
+for arg in "$@"; do
+    case "$arg" in
+        --lowest) PREFER_LOWEST=true ;;
+    esac
+done
 
 cd /var/www/html/app
 
@@ -26,14 +33,17 @@ fi
 #export COMPOSER_ROOT_VERSION=1.x-dev
 
 ## Configure Composer Auth
-export COMPOSER_AUTH="{\"github-oauth\": {\"github.com\": \"$GITHUB_PRIVATE_ACCESS_TOKEN\"}}"
+if [ -n "$GITHUB_PRIVATE_ACCESS_TOKEN" ]; then
+    export COMPOSER_AUTH="{\"github-oauth\": {\"github.com\": \"$GITHUB_PRIVATE_ACCESS_TOKEN\"}}"
+fi
 
 ## Add Repman Repository Link
 composer config repositories.opendxp '{"type": "composer", "url": "https://open-dxp.repo.repman.io"}' --file composer.json
 
 ## Update Composer Dependencies
-composer update --no-progress --no-scripts
-# composer update --no-progress --no-scripts --prefer-lowest
+COMPOSER_FLAGS="--no-progress --no-scripts"
+[ "$PREFER_LOWEST" = true ] && COMPOSER_FLAGS="$COMPOSER_FLAGS --prefer-lowest"
+composer update $COMPOSER_FLAGS
 
 ./bin/console cache:clear --no-interaction
 ./bin/console assets:install public --relative --symlink

@@ -8,12 +8,16 @@
 set -e
 
 RUN_COMPOSER=false
+PREFER_LOWEST=false
 ARGS=()
 
 for arg in "$@"; do
     case "$arg" in
         --composer)
             RUN_COMPOSER=true
+            ;;
+        --lowest)
+            PREFER_LOWEST=true
             ;;
         *)
             ARGS+=("$arg")
@@ -78,7 +82,9 @@ cp GeoLite2-City.mmdb app/var/config/GeoLite2-City.mmdb
 
 if [ "$RUN_COMPOSER" = true ]; then
     echo "run composer task..."
-    ddev opendxp-tests-composer
+    COMPOSER_ARGS=()
+    [ "$PREFER_LOWEST" = true ] && COMPOSER_ARGS+=(--lowest)
+    ddev opendxp-tests-composer "${COMPOSER_ARGS[@]}"
 fi
 
 ddev opendxp-tests-dispatcher ${ARGS[@]}

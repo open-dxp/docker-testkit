@@ -2,7 +2,7 @@
 
 ## Description: Run OpenDXP Tests
 ## Usage: opendxp-tests-dispatcher
-## Example: "ddev opdenxp-tests-dispatcher"
+## Example: "ddev opendxp-tests-dispatcher"
 set -e
 
 APP_IP="$(ip addr show eth0 | grep 'inet\b' | awk '{print $2}' | cut -d/ -f1)"

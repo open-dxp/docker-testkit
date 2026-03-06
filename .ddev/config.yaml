@@ -6,7 +6,6 @@ webserver_type: apache-fpm
 router_http_port: "80"
 router_https_port: "443"
 composer_version: "2"
-webimage: docker.dachcom.net/docker/ddev-base:latest
 additional_fqdns:
     - 'opendxp-testing.test'
 additional_hostnames:
