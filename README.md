@@ -1,6 +1,6 @@
 # OpenDXP Testkit
 
-A DDEV-based local test environment for OpenDXP bundles. It rsyncs your bundle into a containerized Symfony/Pimcore application and runs Codeception, PHPStan, and PHP CS Fixer tests against it.
+A DDEV-based local test environment for OpenDXP bundles. It rsyncs your bundle into a containerized Symfony/OpenDXP application and runs Codeception, PHPStan, and PHP CS Fixer tests against it.
 
 ### Support Table
 
