@@ -230,10 +230,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             const filteredStdout = filterOutput(result.stdout || '');
             const filteredStderr = filterOutput(result.stderr || '');
-            const output = [filteredStdout, filteredStderr ? `STDERR:\n${filteredStderr}` : '']
+            let output = [filteredStdout, filteredStderr ? `STDERR:\n${filteredStderr}` : '']
                 .filter(Boolean)
                 .join('\n')
                 .trim();
+
+            // Append Response artifact content if present (strip ANSI codes first for reliable matching)
+            const combined = ((result.stdout || '') + (result.stderr || '')).replace(/\x1b\[[0-9;]*m/g, '');
+            const responseMatch = combined.match(/^Response:\s*(.+)$/m);
+            if (responseMatch) {
+                const containerPath = responseMatch[1].trim();
+                const localPath = containerPath.replace('/var/www/html/app', path.join(TESTKIT_DIR, 'app'));
+                if (fs.existsSync(localPath)) {
+                    let content = fs.readFileSync(localPath, 'utf8');
+                    const MAX_CHARS = 30_000;
+                    if (content.length > MAX_CHARS) {
+                        content = content.slice(0, MAX_CHARS) + '\n[... truncated]';
+                    }
+                    output += `\n\n--- Response artifact ---\n${content}`;
+                }
+            }
 
             return {
                 content: [{type: 'text', text: output || '(no output)'}],
