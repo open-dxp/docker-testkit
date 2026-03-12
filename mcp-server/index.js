@@ -237,7 +237,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             // Append Response artifact content if present (strip ANSI codes first for reliable matching)
             const combined = ((result.stdout || '') + (result.stderr || '')).replace(/\x1b\[[0-9;]*m/g, '');
-            const responseMatch = combined.match(/^Response:\s*(.+)$/m);
+            const responseMatch = combined.match(/^(?:Response|Html):\s*(.+)$/m);
             if (responseMatch) {
                 const containerPath = responseMatch[1].trim();
                 const localPath = containerPath.replace('/var/www/html/app', path.join(TESTKIT_DIR, 'app'));

@@ -48,9 +48,9 @@ fi
 rsync -av \
     --delete \
     --exclude="$(basename $_OPENDXP_CODECEPTION_FRAMEWORK_PATH)" \
+    --exclude="/vendor" \
+    --exclude="/var/cache" \
     --exclude="docs" \
-    --exclude="vendor" \
-    --exclude="cache" \
     --exclude="*.md" \
     --exclude=".git" \
     --exclude=".gitattributes" \
