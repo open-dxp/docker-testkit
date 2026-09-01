@@ -7,6 +7,21 @@
 
 set -e
 
+# One run at a time. Everything below rsyncs into app/ with --delete and rebuilds the database, so a
+# second run entering here pulls the ground out from under the first. The lock is held for the whole
+# command, so a caller waits instead of having to look whether anybody else is busy.
+_OPENDXP_TESTS_LOCK="${TMPDIR:-/tmp}/opendxp-tests-$(id -u).lock"
+exec 9>"$_OPENDXP_TESTS_LOCK"
+
+if ! flock -n 9; then
+    echo "A test run is already in progress. Waiting for it to finish..." >&2
+
+    if ! flock -w 3600 9; then
+        echo "Error: gave up after an hour. Something is holding $_OPENDXP_TESTS_LOCK" >&2
+        exit 1
+    fi
+fi
+
 RUN_COMPOSER=false
 PREFER_LOWEST=false
 ARGS=()
@@ -51,6 +66,7 @@ rsync -av \
     --exclude="/vendor" \
     --exclude="/var/cache" \
     --exclude="docs" \
+    --include="SKILL.md" \
     --exclude="*.md" \
     --exclude=".git" \
     --exclude=".gitattributes" \
