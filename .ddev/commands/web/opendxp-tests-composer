@@ -13,12 +13,17 @@ done
 
 cd /var/www/html/app
 
+## A suggest value is either a real version constraint or free prose
+term='([\^~]|>=?|<=?|!=|=)?(dev-[0-9A-Za-z._/-]+|v?[0-9][0-9A-Za-z.*+-]*|\*)(@(dev|alpha|beta|RC|stable))?'
+constraint="^$term([ ,|-]+$term)*$"
+
 if jq -e '.suggest' composer.json > /dev/null; then
 
-    packages=$(jq -r '.suggest | to_entries | map(select((.key | startswith("ext-") | not) and (.value | test("^[0-9^~>=<!*@][0-9.*^~>=<!*| ,@-]*$")))) | map("\(.key):\(.value)") | join(" ")' composer.json)
+    suggested=$(jq -r --arg re "$constraint" '.suggest | to_entries | map(select((.key | startswith("ext-") | not) and (.value | test($re)))) | map("\(.key):\(.value)")[]' composer.json)
 
-    if [ -n "$packages" ]; then
-        composer require $packages -W --no-progress --no-update
+    if [ -n "$suggested" ]; then
+        mapfile -t packages <<< "$suggested"
+        composer require "${packages[@]}" -W --no-progress --no-update
     else
         echo "No packages found in the suggest section."
     fi
