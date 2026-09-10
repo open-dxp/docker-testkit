@@ -1,0 +1,37 @@
+services:
+    deptrac:
+        build:
+            context: ./analysis
+            args:
+                TOOL: deptrac
+                PHP_VERSION: ${DDEV_PHP_VERSION:-8.4}
+                PACKAGES: "graphviz ttf-dejavu"
+        image: ddev-${DDEV_SITENAME}-deptrac
+        container_name: ddev-${DDEV_SITENAME}-deptrac
+        command: ["tail", "-f", "/dev/null"]
+        working_dir: /src
+        user: "$DDEV_UID:$DDEV_GID"
+        labels:
+            com.ddev.site-name: ${DDEV_SITENAME}
+            com.ddev.approot: $DDEV_APPROOT
+        volumes:
+            - "../app:/src"
+            - ".:/mnt/ddev_config"
+
+    phparkitect:
+        build:
+            context: ./analysis
+            args:
+                TOOL: phparkitect
+                PHP_VERSION: "8.3"
+        image: ddev-${DDEV_SITENAME}-phparkitect
+        container_name: ddev-${DDEV_SITENAME}-phparkitect
+        command: ["tail", "-f", "/dev/null"]
+        working_dir: /src
+        user: "$DDEV_UID:$DDEV_GID"
+        labels:
+            com.ddev.site-name: ${DDEV_SITENAME}
+            com.ddev.approot: $DDEV_APPROOT
+        volumes:
+            - "../app:/src"
+            - ".:/mnt/ddev_config"

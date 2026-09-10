@@ -40,41 +40,14 @@ for arg in "$@"; do
     esac
 done
 
-_OPENDXP_CODECEPTION_FRAMEWORK_PATH='/tmp/opendxp-codeception-framework'
-_BUNDLE_PATH=$(ddev exec echo '$TEST_BUNDLE_LOCAL_PATH')
-_BUNDLE_DIR_NAME=$(ddev exec echo '$TEST_BUNDLE_DIR_NAME')
-_BUNDLE_SYNC_DIR="$_BUNDLE_PATH/$_BUNDLE_DIR_NAME"
+. "$(dirname "$0")/../../scripts/sync-bundle.sh"
 
 if ! ddev exec test -d "$_OPENDXP_CODECEPTION_FRAMEWORK_PATH"; then
     echo "Error: Codeception Framework source directory does not exist: $_OPENDXP_CODECEPTION_FRAMEWORK_PATH" >&2
     exit 1
 fi
 
-if [ ! -d "$_BUNDLE_SYNC_DIR" ]; then
-    echo "Error: Source directory does not exist: $_BUNDLE_SYNC_DIR" >&2
-    exit 1
-fi
-
-if [ ! -d "app" ]; then
-    echo "Error: TargetDirectory does not exist: app" >&2
-    exit 1
-fi
-
-rsync -av \
-    --delete \
-    --exclude="$(basename $_OPENDXP_CODECEPTION_FRAMEWORK_PATH)" \
-    --exclude="/vendor" \
-    --exclude="/var/cache" \
-    --exclude="docs" \
-    --include="SKILL.md" \
-    --exclude="*.md" \
-    --exclude=".git" \
-    --exclude=".gitattributes" \
-    --exclude=".gitignore" \
-    --exclude=".php-cs-fixer-finder.dist.php" \
-    "$_BUNDLE_SYNC_DIR/" \
-    "app/"
-
+sync_bundle_into_app
 
 ddev exec bash -c 'cd /var/www/html/app && chmod +x ./.github/ci/scripts/setup-opendxp-environment.sh'
 ddev exec bash -c 'cd /var/www/html/app && ./.github/ci/scripts/setup-opendxp-environment.sh'
@@ -86,6 +59,11 @@ cp .ddev/apache/.htaccess app/public/.htaccess
 if [ -d "assets-test" ]; then
     ln -sfn ../../assets-test app/public/assets-test
 fi
+
+# The last analysis run, reachable at <project url>/analysis/ through the web server that is already
+# there. The rsync above wipes app/, so the link is made again on every run.
+mkdir -p app/var/analysis
+ln -sfn ../var/analysis app/public/analysis
 
 ## geolite ip
 if [ ! -f "GeoLite2-City.mmdb" ]; then

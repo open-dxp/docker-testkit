@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+
+## Description: Run the architecture checks and write a report
+## Usage: opendxp-analysis [deptrac|arkitect]
+## Example: "ddev opendxp-analysis" or "ddev opendxp-analysis deptrac"
+## ExecRaw: true
+
+set -e
+
+# The same copy the tests read, so a rule is checked against the source that was measured.
+. "$(dirname "$0")/../../scripts/sync-bundle.sh"
+sync_bundle_into_app
+
+OUT=app/var/analysis
+mkdir -p "$OUT"
+
+# Reachable through the web server that is already there, at <project url>/analysis/.
+ln -sfn ../var/analysis app/public/analysis
+
+run_deptrac() {
+    echo ""
+    echo "*************************************************************************"
+    echo "deptrac - which layer may depend on which"
+    echo "*************************************************************************"
+    echo ""
+    # The edge list first: the picture is drawn from it.
+    ddev exec -s deptrac deptrac analyse --config-file=deptrac.yaml --no-progress \
+        --formatter=json --output=var/analysis/deptrac.json >/dev/null 2>&1 || true
+    ddev exec -s deptrac sh -c 'php /mnt/ddev_config/tools/layer-graph.php \
+        deptrac.yaml var/analysis/deptrac.json | dot -Tpng -o var/analysis/deptrac.png'
+    ddev exec -s deptrac deptrac analyse --config-file=deptrac.yaml --no-progress \
+        --formatter=table 2>&1 | tee "$OUT/deptrac.txt"
+    return "${PIPESTATUS[0]}"
+}
+
+run_arkitect() {
+    echo ""
+    echo "*************************************************************************"
+    echo "phparkitect - what shape a class has"
+    echo "*************************************************************************"
+    echo ""
+    ddev exec -s phparkitect phparkitect check --config=phparkitect.php --no-ansi 2>&1 \
+        | tee "$OUT/phparkitect.txt"
+    return "${PIPESTATUS[0]}"
+}
+
+STATUS=0
+
+case "${1:-all}" in
+    deptrac)  run_deptrac  || STATUS=$? ;;
+    arkitect) run_arkitect || STATUS=$? ;;
+    all)      run_deptrac  || STATUS=$?
+              run_arkitect || STATUS=$? ;;
+    *) echo "Usage: ddev opendxp-analysis [deptrac|arkitect]" >&2; exit 1 ;;
+esac
+
+ddev exec php /var/www/html/.ddev/tools/index.php app/var/analysis >/dev/null
+
+echo ""
+echo "report: $(ddev exec printenv DDEV_PRIMARY_URL | tr -d '\r')/analysis/index.html"
+exit "$STATUS"
