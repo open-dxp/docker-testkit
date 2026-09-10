@@ -19,7 +19,9 @@ do
             echo "run codeception tests"
             echo "*************************************************************************"
             cd /var/www/html/app
-            /usr/bin/php -d memory_limit=-1 vendor/bin/codecept run -c . --env local "${@:2}"
+            # A capped limit, not -1: an unbounded run grows until the kernel needs memory and the
+            # OOM killer takes the largest other process on the machine, which is the developer's IDE.
+            /usr/bin/php -d memory_limit=3G vendor/bin/codecept run -c . --env local "${@:2}"
             cd ~-
             exit
             ;;
@@ -30,7 +32,7 @@ do
             echo "*************************************************************************"
             echo ""
             cd /var/www/html/app
-            PHP_IDE_CONFIG="serverName=opendxp.test" /usr/bin/php -dxdebug.remote_enable=1 -dxdebug.remote_autostart=On -dxdebug.idekey=PHPSTORM -dxdebug.remote_host=$2 -d memory_limit=-1 -d memory_limit=-1 vendor/bin/codecept run -c . --env local "${@:3}"
+            PHP_IDE_CONFIG="serverName=opendxp.test" /usr/bin/php -dxdebug.remote_enable=1 -dxdebug.remote_autostart=On -dxdebug.idekey=PHPSTORM -dxdebug.remote_host=$2 -d memory_limit=3G vendor/bin/codecept run -c . --env local "${@:3}"
             cd ~-
             exit
             ;;
