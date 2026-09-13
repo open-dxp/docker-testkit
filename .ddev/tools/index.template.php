@@ -167,12 +167,12 @@
             border: 1px solid var(--rule);
             border-radius: 3px;
             overflow: auto;
-            max-height: 440px
         }
 
         figure img {
             display: block;
-            max-width: none
+            max-width: none;
+            width: 100%;
         }
 
         pre {
