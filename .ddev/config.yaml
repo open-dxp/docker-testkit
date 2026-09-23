@@ -24,6 +24,7 @@ hooks:
         -   exec-host: "echo 'Booting Test System'"
         -   exec-host: "[ -d app ] && rm -rf app || true; mkdir -p app"
         -   exec-host: "mkdir -p app/public"
+        -   exec-host: "mkdir -p app/tests/_data/downloads && chmod 777 app/tests/_data/downloads"
         -   exec-host: "touch app/public/index.php"
         -   exec-host: "export $(grep -v '^#' .ddev/.env | xargs) && ln -sfn $OPENDXP_CODECEPTION_FRAMEWORK_LOCAL_PATH app/opendxp-codeception-framework"
 
