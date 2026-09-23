@@ -1,6 +1,5 @@
 ######################
 # Compiled source    #
-######################
 *.com
 *.class
 *.dll
@@ -8,9 +7,7 @@
 *.o
 *.so
 
-######################
 # Packages           #
-######################
 # it's better to unpack these files and commit the raw source
 # git has its own built in compression methods
 *.7z
@@ -19,14 +16,10 @@
 *.iso
 *.jar
 
-######################
 # Logs and databases #
-######################
 *.log
 
-######################
 # Global             #
-######################
 .DS_*
 ._*
 .idea
@@ -39,9 +32,7 @@ node_modules
 .bash_history
 .viminfo
 
-######################
 # Test               #
-######################
 /data
 /app
 /assets-test
@@ -52,9 +43,11 @@ GeoLite2-City.mmdb
 # AI
 /mcp-server/node_modules
 
-######################
 # Runtime state      #
-######################
 .ddev/downloads/
 .ddev/slots.tsv
 
+# Analysewerkzeuge   #
+# Jedes Werkzeug hat seine eigene composer-Wurzel unter .ddev/tools/.
+# composer.json und composer.lock sind versioniert, das vendor nicht.
+/.ddev/tools/*/vendor/
