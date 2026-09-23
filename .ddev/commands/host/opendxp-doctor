@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+
+## Description: Compare this testkit against what CI runs for a bundle
+## Usage: opendxp-doctor <bundle>
+## Example: "ddev opendxp-doctor formbuilder-bundle"
+## ExecRaw: true
+
+set -e
+
+. "$(dirname "$0")/../../scripts/testkit-lib.sh"
+
+BUNDLE="$1"
+testkit_require_bundle "$BUNDLE" "opendxp-doctor"
+
+MATRIX_URL="https://raw.githubusercontent.com/open-dxp/workflows-collection-public/main/codeception-tests-configuration/matrix-config.json"
+BUNDLE_DIR="$(testkit_bundle_dir "$BUNDLE")"
+
+# The same key the workflow builds from composer.json, so this reads the row CI reads.
+PHP_KEY=$(jq -r '.require.php' "$BUNDLE_DIR/composer.json" | grep -oP '\d+\.\d+' | paste -sd, -)
+
+MATRIX=$(curl -fsSL "$MATRIX_URL" 2>/dev/null || true)
+
+if [ -z "$MATRIX" ]; then
+    echo "Could not read the CI matrix from $MATRIX_URL" >&2
+    exit 1
+fi
+
+CI_PHP=$(printf '%s' "$MATRIX" | jq -r --arg k "$PHP_KEY" '[.configs[] | select(.php_version == $k) | .matrix[]."php-version"] | unique | join(", ")')
+CI_DB=$(printf '%s' "$MATRIX" | jq -r --arg k "$PHP_KEY" '[.configs[] | select(.php_version == $k) | .matrix[].database] | unique | join(", ")')
+
+LOCAL_PHP=$(ddev exec php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;' | tr -d '\r')
+LOCAL_DB=$(ddev exec printenv DDEV_DATABASE | tr -d '\r')
+LOCAL_CHROME=$(docker exec "ddev-${DDEV_SITENAME:-$(basename "$PWD")}-selenium-chrome" google-chrome --version 2>/dev/null | grep -oP '\d+' | head -1)
+
+status=0
+say() { printf '  %-10s %-28s %s\n' "$1" "$2" "$3"; }
+
+echo ""
+echo "$BUNDLE declares php $(jq -r '.require.php' "$BUNDLE_DIR/composer.json")"
+echo ""
+printf '  %-10s %-28s %s\n' "" "here" "ci"
+echo ""
+
+if printf '%s' "$CI_PHP" | grep -qw "$LOCAL_PHP"; then
+    say "php" "$LOCAL_PHP" "$CI_PHP"
+else
+    say "php" "$LOCAL_PHP" "$CI_PHP  <- not one of them"
+    status=1
+fi
+
+if printf '%s' "$CI_DB" | grep -qi "${LOCAL_DB%%:*}"; then
+    say "database" "$LOCAL_DB" "$CI_DB"
+else
+    say "database" "$LOCAL_DB" "$CI_DB  <- a different engine"
+    status=1
+fi
+
+# CI takes whatever chrome its runner image carries, and that moves on its own. There is no version
+# to agree with, only a distance to keep small: a browser left behind long enough stops rendering
+# the way the one in CI does, and the tests disagree for reasons that are not in the code.
+if [ -n "$LOCAL_CHROME" ]; then
+    CURRENT=$(curl -fsSL "https://versionhistory.googleapis.com/v1/chrome/platforms/linux/channels/stable/versions" 2>/dev/null \
+        | jq -r '.versions[0].version' 2>/dev/null | cut -d. -f1)
+
+    if [ -n "$CURRENT" ] && [ "$((CURRENT - LOCAL_CHROME))" -gt 2 ]; then
+        say "chrome" "$LOCAL_CHROME" "$CURRENT stable  <- $((CURRENT - LOCAL_CHROME)) versions behind"
+        status=1
+    else
+        say "chrome" "$LOCAL_CHROME" "${CURRENT:-?} stable"
+    fi
+else
+    say "chrome" "not running" "-"
+fi
+
+echo ""
+
+if [ "$status" -ne 0 ]; then
+    echo "A test that fails here and passes in CI, or the other way round, can come from the lines marked above." >&2
+fi
+
+exit "$status"

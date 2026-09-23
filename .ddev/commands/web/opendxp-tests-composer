@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 
 ## Description: Run Composer in Test environment
-## Usage: opendxp-tests-composer
+## Usage: opendxp-tests-composer <slot> [--lowest]
 ## Example: "ddev opendxp-tests-composer"
 
+SLOT="$1"
+shift
 PREFER_LOWEST=false
 for arg in "$@"; do
     case "$arg" in
@@ -11,7 +13,7 @@ for arg in "$@"; do
     esac
 done
 
-cd /var/www/html/app
+cd "/var/www/html/app/slot-$SLOT"
 
 ## A suggest value is either a real version constraint or free prose
 term='([\^~]|>=?|<=?|!=|=)?(dev-[0-9A-Za-z._/-]+|v?[0-9][0-9A-Za-z.*+-]*|\*)(@(dev|alpha|beta|RC|stable))?'

@@ -22,10 +22,9 @@ database:
 hooks:
     pre-start:
         -   exec-host: "echo 'Booting Test System'"
-        -   exec-host: "[ -d app ] && rm -rf app || true; mkdir -p app"
-        -   exec-host: "mkdir -p app/public"
-        -   exec-host: "mkdir -p app/tests/_data/downloads && chmod 777 app/tests/_data/downloads"
-        -   exec-host: "touch app/public/index.php"
+        -   exec-host: "mkdir -p app/public && touch app/public/index.php"
+        -   exec-host: "for i in $(seq 1 10); do mkdir -p app/slot-$i/public; done"
+        -   exec-host: "mkdir -p .ddev/downloads && chmod 777 .ddev/downloads"
         -   exec-host: "export $(grep -v '^#' .ddev/.env | xargs) && ln -sfn $OPENDXP_CODECEPTION_FRAMEWORK_LOCAL_PATH app/opendxp-codeception-framework"
 
 web_environment:
@@ -35,14 +34,10 @@ web_environment:
     - APP_ENV=test
     - SYMFONY_DEPRECATIONS_HELPER=weak
 
-    - OPENDXP_PROJECT_ROOT=/var/www/html/app
-    - OPENDXP_CLASS_DIRECTORY=/var/www/html/app/var/classes
     - OPENDXP_CODECEPTION_FRAMEWORK_PATH=/tmp/opendxp-codeception-framework
 
     - WEBDRIVER_DOWNLOAD_PATH=/home/seluser/Downloads
 
-    - OPENDXP_TEST_DB_DSN=mysql://db:db@db:3306/db
-    - OPENDXP_INSTALL_MYSQL_DATABASE=db
     - OPENDXP_INSTALL_MYSQL_USERNAME=db
     - OPENDXP_INSTALL_MYSQL_PASSWORD=db
     - OPENDXP_INSTALL_ADMIN_USERNAME=db
