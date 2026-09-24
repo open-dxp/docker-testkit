@@ -139,6 +139,7 @@ if [ "$KIND" = bundle ] && [ "$NEEDS_FRAMEWORK" = false ]; then
 fi
 
 write_testkit_env
+testkit_project_environment "$TEST_ROOT" > "$SLOT_ROOT/.testkit-project-env"
 
 if [ "$RUN_COMPOSER" = true ]; then
     COMPOSER_ARGS=()
@@ -152,12 +153,22 @@ if [ "$KIND" = bundle ] && [ "$NEEDS_FRAMEWORK" = true ]; then
 fi
 
 if [ "$RUN_COMPOSER" = true ]; then
-    ddev exec bash -c "cd /var/www/html/$APP \
+    ddev exec bash -c "set -a; . /var/www/html/$SLOT_ROOT/.testkit-project-env; set +a \
+        && cd /var/www/html/$APP \
         && ./bin/console cache:clear --no-interaction \
         && ./bin/console assets:install public --relative --symlink \
-        && { [ -d var/classes ] && ./bin/console opendxp:build:classes --no-interaction || true; } \
         && { [ -f phpstan.neon ] && vendor/bin/phpstan clear-result-cache -c phpstan.neon >/dev/null 2>&1 \
              || vendor/bin/phpstan clear-result-cache -c ../phpstan.neon >/dev/null 2>&1 || true; }"
+fi
+
+# The model classes are generated from the definitions, and the definitions arrive with every sync.
+# Tied to the composer step they were built once, and every run after that analysed against classes
+# that were not there.
+if [ -d "$APP/var/classes" ]; then
+    ddev exec bash -c "set -a; . /var/www/html/$SLOT_ROOT/.testkit-project-env; set +a \
+        && cd /var/www/html/$APP \
+        && ./bin/console opendxp:build:classes --no-interaction" >/dev/null \
+        || echo "opendxp:build:classes failed, the generated model classes may be missing" >&2
 fi
 
 cp .ddev/apache/.htaccess "$APP/public/.htaccess" 2>/dev/null || true

@@ -21,6 +21,13 @@ APP="$ROOT${APP_REL:+/$APP_REL}"
 VENDOR="${APP_REL:+$APP_REL/}vendor"
 APP_IP="$(ip addr show eth0 | grep 'inet\b' | awk '{print $2}' | cut -d/ -f1)"
 
+# Before the testkit's own values, so those win on a name that appears in both.
+if [ -s "$ROOT/.testkit-project-env" ]; then
+    set -a
+    . "$ROOT/.testkit-project-env"
+    set +a
+fi
+
 export WEBDRIVER_HOST="selenium-chrome"
 export WEBDRIVER_URL="http://$APP_IP:$PORT/"
 export OPENDXP_PROJECT_ROOT="$APP"
@@ -59,10 +66,25 @@ case "$1" in
 
         bin/console cache:warmup --env=test --no-optional-warmers
         mkdir -p "$ROOT/tests/_output"
+
+        # phpstan caches its verdicts under sys_get_temp_dir(), which every slot in this container
+        # shares. One slot's "class not found" would then be served to another.
+        export TMPDIR="$APP/var/phpstan"
+        mkdir -p "$TMPDIR"
         "$PHP" -d memory_limit=2G vendor/bin/phpstan analyse -c "$NEON" "${@:2}" || STATUS=$?
         # A second pass against a warm result cache costs almost nothing and gives the report JUnit.
+        # Kept only when it is a report: phpstan writes nothing at all when it refuses to start, and
+        # an empty file reads as a run that found nothing rather than one that never happened.
+        JUNIT="$ROOT/tests/_output/phpstan.junit.xml"
         "$PHP" -d memory_limit=2G vendor/bin/phpstan analyse -c "$NEON" --no-progress \
-            --error-format=junit "${@:2}" > "$ROOT/tests/_output/phpstan.junit.xml" || true
+            --error-format=junit "${@:2}" > "$JUNIT.part" 2>/dev/null || true
+
+        if grep -q "<testsuite" "$JUNIT.part" 2>/dev/null; then
+            mv "$JUNIT.part" "$JUNIT"
+        else
+            rm -f "$JUNIT.part"
+        fi
+
         exit "${STATUS:-0}"
         ;;
     *)

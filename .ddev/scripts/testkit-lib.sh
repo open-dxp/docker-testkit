@@ -52,6 +52,49 @@ testkit_database() {
     printf 'db_slot_%d' "$1"
 }
 
+# A project keeps variables its application needs in its own .ddev/config.yaml, and the testkit is a
+# different ddev project that never sees them.
+testkit_project_environment() {
+    local dir config
+    dir=$(cd "$1" && pwd)
+
+    while [ "$dir" != "/" ]; do
+        config="$dir/.ddev/config.yaml"
+        [ -f "$config" ] && break
+        dir=$(dirname "$dir")
+    done
+
+    [ -f "$config" ] || return 0
+
+    # Written as KEY='value' with the shell's own escaping, because the file is read back with
+    # ". file". A value is a YAML plain scalar unless it is quoted, so a trailing comment belongs to
+    # the comment and not to the value.
+    awk '
+        BEGIN { q = sprintf("%c", 39) }
+
+        /^web_environment:/ { inside = 1; next }
+        inside && /^[^[:space:]]/ { inside = 0 }
+
+        inside && /^[[:space:]]*-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=/ {
+            line = $0
+            sub(/^[[:space:]]*-[[:space:]]*/, "", line)
+
+            equals = index(line, "=")
+            key = substr(line, 1, equals - 1)
+            value = substr(line, equals + 1)
+
+            if (value ~ /^".*"$/ || value ~ /^.*$/ && substr(value, 1, 1) == q && substr(value, length(value)) == q) {
+                value = substr(value, 2, length(value) - 2)
+            } else {
+                sub(/[[:space:]]+#.*$/, "", value)
+            }
+
+            gsub(q, q "\\" q q, value)
+            print key "=" q value q
+        }
+    ' "$config"
+}
+
 testkit_slot_key() {
     awk -F'\t' -v s="$1" '$1 == s { print $2; exit }' "$TESTKIT_SLOT_FILE" 2>/dev/null
 }

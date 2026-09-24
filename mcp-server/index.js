@@ -133,10 +133,14 @@ function readResults(slot, since) {
     return fs.readdirSync(dir)
         .filter((f) => f.endsWith('.xml'))
         .filter((f) => fs.statSync(path.join(dir, f)).mtimeMs >= since)
-        .map((file) => {
+        .map((file) => ({file, xml: fs.readFileSync(path.join(dir, file), 'utf8')}))
+        // An empty or half written file is a tool that never got to report, not a run that found
+        // nothing. Left in, it reads as a clean result and hides the error that caused it.
+        .filter(({xml}) => xml.includes('<testsuite'))
+        .map(({file, xml}) => {
             // Counted from the testcase elements, not from the testsuite attributes: a report with
             // one suite per class carries several, and reading the first one reports a fraction.
-            const cases = fs.readFileSync(path.join(dir, file), 'utf8').split(/<testcase\b/).slice(1);
+            const cases = xml.split(/<testcase\b/).slice(1);
             const failures = [];
 
             for (const testcase of cases) {
