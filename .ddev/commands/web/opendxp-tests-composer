@@ -1,54 +1,104 @@
 #!/usr/bin/env bash
 
-## Description: Run Composer in Test environment
-## Usage: opendxp-tests-composer
-## Example: "ddev opendxp-tests-composer"
+## Description: Install the dependencies of the package in a slot
+## Usage: opendxp-tests-composer <slot> <php version> <app dir> [--framework] [--lowest]
+## Example: "ddev opendxp-tests-composer 3 8.4 app --framework"
+
+set -e
+
+FRAMEWORK_PACKAGE=open-dxp/opendxp-codeception-framework
+
+SLOT="$1"
+PHP="/usr/bin/php$2"
+APP_REL="$3"
+if [ "$APP_REL" = "." ]; then
+    APP_REL=""
+fi
+shift 3
 
 PREFER_LOWEST=false
+NEEDS_FRAMEWORK=false
 for arg in "$@"; do
     case "$arg" in
-        --lowest) PREFER_LOWEST=true ;;
+        --lowest)    PREFER_LOWEST=true ;;
+        --framework) NEEDS_FRAMEWORK=true ;;
     esac
 done
 
-cd /var/www/html/app
+cd "/var/www/html/app/slot-$SLOT${APP_REL:+/$APP_REL}"
 
-## A suggest value is either a real version constraint or free prose
+. /mnt/ddev_config/testkit.env
+
+COMPOSER_BIN=$(command -v composer)
+
+composer() {
+    "$PHP" "$COMPOSER_BIN" "$@"
+}
+
+app_requires() {
+    jq -e --arg p "$1" '.require[$p] // .["require-dev"][$p]' composer.json >/dev/null 2>&1
+}
+
+if [ -n "$GITHUB_PRIVATE_ACCESS_TOKEN" ]; then
+    export COMPOSER_AUTH="{\"github-oauth\": {\"github.com\": \"$GITHUB_PRIVATE_ACCESS_TOKEN\"}}"
+fi
+
+composer config repositories.opendxp '{"type": "composer", "url": "https://open-dxp.repo.repman.io"}' --file composer.json
+
+declare -A PATH_VERSION=()
+
+for entry in $TESTKIT_PATHS; do
+    package="${entry%%=*}"
+    PATH_VERSION["$package"]="${entry#*=}"
+
+    # First repository that offers a package wins, so the checkout goes in front of the others.
+    "$PHP" -r '
+        $file = "composer.json";
+        $json = json_decode(file_get_contents($file), true);
+        $json["repositories"] = array_merge(
+            [["type" => "path", "url" => "/mnt/testkit-paths/" . $argv[1], "options" => ["symlink" => true]]],
+            array_values($json["repositories"] ?? [])
+        );
+        file_put_contents($file, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+    ' "$package"
+done
+
+REQUIRE=()
+
+# No bundle declares the framework, so the testkit adds it for the ones whose tests are built on it.
+if [ "$NEEDS_FRAMEWORK" = true ] && ! app_requires "$FRAMEWORK_PACKAGE"; then
+    REQUIRE+=("$FRAMEWORK_PACKAGE${PATH_VERSION[$FRAMEWORK_PACKAGE]:+:${PATH_VERSION[$FRAMEWORK_PACKAGE]}}")
+fi
+
+# A checkout carries no release number, so a package taken from one has to be asked for by its dev
+# version. A package nothing here uses stays uninstalled, its repository notwithstanding.
+for package in "${!PATH_VERSION[@]}"; do
+    if app_requires "$package"; then
+        REQUIRE+=("$package:${PATH_VERSION[$package]}")
+    fi
+done
+
+if [ ${#REQUIRE[@]} -gt 0 ]; then
+    composer require --dev "${REQUIRE[@]}" -W --no-progress --no-update
+fi
+
+# A suggest value is either a real version constraint or free prose.
 term='([\^~]|>=?|<=?|!=|=)?(dev-[0-9A-Za-z._/-]+|v?[0-9][0-9A-Za-z.*+-]*|\*)(@(dev|alpha|beta|RC|stable))?'
 constraint="^$term([ ,|-]+$term)*$"
 
-if jq -e '.suggest' composer.json > /dev/null; then
-
+if jq -e '.suggest' composer.json >/dev/null; then
     suggested=$(jq -r --arg re "$constraint" '.suggest | to_entries | map(select((.key | startswith("ext-") | not) and (.value | test($re)))) | map("\(.key):\(.value)")[]' composer.json)
 
     if [ -n "$suggested" ]; then
         mapfile -t packages <<< "$suggested"
         composer require "${packages[@]}" -W --no-progress --no-update
-    else
-        echo "No packages found in the suggest section."
     fi
-else
-    echo "No suggest section found in composer.json."
 fi
 
-## Set Dynamic Search Dependency to branch alias (@todo: not here!)
-#sed -i 's,\("open-dxp\/dynamic-search-bundle"\): "\(.*\)",\1: "1.x-dev",g' composer.json
-
-## Set Composer Root Version (@todo)
-#export COMPOSER_ROOT_VERSION=1.x-dev
-
-## Configure Composer Auth
-if [ -n "$GITHUB_PRIVATE_ACCESS_TOKEN" ]; then
-    export COMPOSER_AUTH="{\"github-oauth\": {\"github.com\": \"$GITHUB_PRIVATE_ACCESS_TOKEN\"}}"
+# Scripts stay on: symfony/runtime writes autoload_runtime.php from a composer event.
+COMPOSER_FLAGS=(--no-progress)
+if [ "$PREFER_LOWEST" = true ]; then
+    COMPOSER_FLAGS+=(--prefer-lowest)
 fi
 
-## Add Repman Repository Link
-composer config repositories.opendxp '{"type": "composer", "url": "https://open-dxp.repo.repman.io"}' --file composer.json
-
-## Update Composer Dependencies
-COMPOSER_FLAGS="--no-progress --no-scripts"
-[ "$PREFER_LOWEST" = true ] && COMPOSER_FLAGS="$COMPOSER_FLAGS --prefer-lowest"
-composer update $COMPOSER_FLAGS
-
-./bin/console cache:clear --no-interaction
-./bin/console assets:install public --relative --symlink
+composer update "${COMPOSER_FLAGS[@]}"

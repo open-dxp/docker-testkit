@@ -17,7 +17,7 @@ services:
             - ".:/mnt/ddev_config"
             # Headless chrome ignores the download directory it is configured with and writes to
             # its own. Point that at the directory seeDownload() reads from.
-            - "${DDEV_APPROOT}/app/tests/_data/downloads:/home/seluser/Downloads"
+            - "${DDEV_APPROOT}/.ddev/downloads:/home/seluser/Downloads"
     web:
         links:
             - selenium-chrome

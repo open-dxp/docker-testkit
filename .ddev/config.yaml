@@ -6,6 +6,7 @@ webserver_type: apache-fpm
 router_http_port: "80"
 router_https_port: "443"
 composer_version: "2"
+fail_on_hook_fail: true
 additional_fqdns:
     - 'opendxp-testing.test'
 additional_hostnames:
@@ -22,30 +23,23 @@ database:
 hooks:
     pre-start:
         -   exec-host: "echo 'Booting Test System'"
-        -   exec-host: "[ -d app ] && rm -rf app || true; mkdir -p app"
-        -   exec-host: "mkdir -p app/public"
-        -   exec-host: "mkdir -p app/tests/_data/downloads && chmod 777 app/tests/_data/downloads"
-        -   exec-host: "touch app/public/index.php"
-        -   exec-host: "export $(grep -v '^#' .ddev/.env | xargs) && ln -sfn $OPENDXP_CODECEPTION_FRAMEWORK_LOCAL_PATH app/opendxp-codeception-framework"
+        -   exec-host: "mkdir -p app/public && touch app/public/index.php"
+        -   exec-host: "python3 .ddev/scripts/testkit-generate.py"
+        -   exec-host: "mkdir -p .ddev/downloads && chmod 777 .ddev/downloads"
+
+    post-start:
+        -   exec: "/mnt/ddev_config/scripts/testkit-fpm.sh"
+        -   exec: "test -d /var/www/html/mcp-server/node_modules || npm --prefix /var/www/html/mcp-server install --omit=dev --no-audit --no-fund"
+
+    pre-stop:
+        -   exec-host: "ddev opendxp-tests-clean --all --fail-if-busy"
 
 web_environment:
 
-    - TEST_EXECUTE_COMPOSER=${TEST_EXECUTE_COMPOSER:-false}
-
+    # bin/console does not pick this up from the slot's .env, so it has to be in the real
+    # environment. Without it the kernel boots in dev and the test configuration never loads.
     - APP_ENV=test
-    - SYMFONY_DEPRECATIONS_HELPER=weak
 
-    - OPENDXP_PROJECT_ROOT=/var/www/html/app
-    - OPENDXP_CLASS_DIRECTORY=/var/www/html/app/var/classes
-    - OPENDXP_CODECEPTION_FRAMEWORK_PATH=/tmp/opendxp-codeception-framework
-
+    # The browser writes downloads here and FileGeneratorHelper reads them back, so both containers
+    # have to agree on the path. The selenium side is set in docker-compose.selenium-chrome.yaml.
     - WEBDRIVER_DOWNLOAD_PATH=/home/seluser/Downloads
-
-    - OPENDXP_TEST_DB_DSN=mysql://db:db@db:3306/db
-    - OPENDXP_INSTALL_MYSQL_DATABASE=db
-    - OPENDXP_INSTALL_MYSQL_USERNAME=db
-    - OPENDXP_INSTALL_MYSQL_PASSWORD=db
-    - OPENDXP_INSTALL_ADMIN_USERNAME=db
-    - OPENDXP_INSTALL_ADMIN_PASSWORD=db
-    - OPENDXP_INSTALL_MYSQL_HOST_SOCKET=db
-

@@ -1,7 +1,7 @@
 {
   "name": "opendxp-testkit-mcp",
   "version": "1.0.0",
-  "description": "MCP server for the OpenDXP Testkit (DDEV-based test runner)",
+  "description": "MCP server for the OpenDXP testkit",
   "type": "module",
   "main": "index.js",
   "scripts": {

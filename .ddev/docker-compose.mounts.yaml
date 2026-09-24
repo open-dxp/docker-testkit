@@ -1,4 +1,0 @@
-services:
-    web:
-        volumes:
-            - ../app/opendxp-codeception-framework:/tmp/opendxp-codeception-framework

@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+
+## Description: Run tests, phpstan or the architecture checks for a bundle or a project
+## Usage: opendxp-tests-run <path or bundle> codecept|phpstan|deptrac|arkitect|all [--php 8.3] [--db mariadb] [args]
+## Example: "ddev opendxp-tests-run formbuilder-bundle codecept tests/Acceptance/ExtJs/SaveFormCest.php"
+## Example: "ddev opendxp-tests-run ~/Projects/dev.dachcom.ch/opendxp-syma/backend phpstan"
+## ExecRaw: true
+
+set -e
+
+. "$(dirname "$0")/../../scripts/testkit-lib.sh"
+
+TARGET="$1"
+shift || true
+
+if [ -z "$TARGET" ]; then
+    echo "Usage: ddev opendxp-tests-run <path or bundle> <task> [args]" >&2
+    exit 1
+fi
+
+[ -d "$TARGET" ] || TARGET=$(testkit_locate "$TARGET") || exit 1
+
+RESOLVED=$(python3 "$(dirname "$0")/../../scripts/testkit-resolve.py" "$TARGET") || exit 1
+IFS=$'\t' read -r TEST_ROOT APP_DIR KIND NAME <<<"$RESOLVED"
+
+RUN_COMPOSER=false
+PREFER_LOWEST=false
+PHP_VERSION="$TESTKIT_PHP_DEFAULT"
+DATABASE_NAME="$TESTKIT_DB_DEFAULT"
+ARGS=()
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --composer) RUN_COMPOSER=true ;;
+        --lowest)   PREFER_LOWEST=true ;;
+        --php)      PHP_VERSION="$2"; shift ;;
+        --db)       DATABASE_NAME="$2"; shift ;;
+        *)          ARGS+=("$1") ;;
+    esac
+    shift
+done
+
+# Only the packages whose test bootstrap reads OPENDXP_CODECEPTION_FRAMEWORK are built on it. Core
+# and about a third of the bundles ship their own testers and would get a second, conflicting set.
+if grep -rqs OPENDXP_CODECEPTION_FRAMEWORK "$TEST_ROOT/tests" "$TEST_ROOT/codeception.dist.yml" "$TEST_ROOT/codeception.yml"; then
+    NEEDS_FRAMEWORK=true
+else
+    NEEDS_FRAMEWORK=false
+fi
+
+testkit_php_known "$PHP_VERSION"
+DATABASE_HOST=$(testkit_db_host "$DATABASE_NAME")
+
+# The slot has to have been provisioned for this exact combination: composer writes a platform
+# check into vendor and refuses to run under a php version it was not installed for.
+KEY="$NAME|php$PHP_VERSION|$DATABASE_NAME"
+
+APP_REL="${APP_DIR#$TEST_ROOT}"
+APP_REL="${APP_REL#/}"
+
+testkit_slot_changed "$KEY" "$APP_REL" && FRESH=true || FRESH=false
+
+SLOT=$(testkit_claim_slot "$KEY")
+PORT=$(testkit_port "$SLOT" "$PHP_VERSION")
+DATABASE=$(testkit_database "$SLOT")
+SLOT_ROOT="app/slot-$SLOT"
+APP="$SLOT_ROOT${APP_REL:+/$APP_REL}"
+
+_LOCK=$(testkit_slot_lock_file "$SLOT")
+exec 9>"$_LOCK"
+
+if ! flock -n 9; then
+    echo "Slot $SLOT is busy. Waiting for it to finish..." >&2
+    flock -w 3600 9 || { echo "Error: gave up after an hour on $_LOCK" >&2; exit 1; }
+fi
+
+echo "$NAME ($KIND) -> slot $SLOT · php $PHP_VERSION · $DATABASE_NAME · port $PORT"
+
+if [ "$FRESH" = true ]; then
+    echo "slot $SLOT was not provisioned for this, installing from scratch"
+    RUN_COMPOSER=true
+fi
+
+testkit_sync "$TEST_ROOT" "$SLOT" "$([ "$FRESH" = true ] && echo false || echo true)" "$APP_REL"
+
+# A recycled slot keeps the tables of whatever ran in it before. Suites that install their own
+# schema drop it themselves, the rest would read someone else's data.
+if [ "$FRESH" = true ]; then
+    testkit_reset_database "$DATABASE" "$DATABASE_HOST"
+else
+    testkit_ensure_database "$DATABASE" "$DATABASE_HOST"
+fi
+
+# Written into the slot's .env rather than exported: one php-fpm pool serves every slot on a php
+# version, so a request can only learn its slot from the application directory it was routed to.
+# Called twice, because some bundles copy a .env of their own over this one while setting up.
+write_testkit_env() {
+    local file="$APP/.env"
+
+    if [ -f "$file" ]; then
+        sed -i '/^# BEGIN TESTKIT$/,/^# END TESTKIT$/d' "$file"
+        [ -n "$(tail -c1 "$file")" ] && echo >> "$file"
+    fi
+
+    cat >> "$file" <<ENV
+# BEGIN TESTKIT
+OPENDXP_PROJECT_ROOT=/var/www/html/$APP
+OPENDXP_CLASS_DIRECTORY=/var/www/html/$APP/var/classes
+OPENDXP_TEST_DB_DSN=mysql://db:db@$DATABASE_HOST/$DATABASE
+OPENDXP_INSTALL_MYSQL_DATABASE=$DATABASE
+# END TESTKIT
+ENV
+}
+
+setup_app() {
+    ddev exec bash -c "cd /var/www/html/$APP \
+        && export OPENDXP_CODECEPTION_FRAMEWORK_PATH=/var/www/html/$APP/vendor/open-dxp/opendxp-codeception-framework OPENDXP_PROJECT_ROOT=/var/www/html/$APP OPENDXP_CLASS_DIRECTORY=/var/www/html/$APP/var/classes OPENDXP_INSTALL_MYSQL_DATABASE=$DATABASE \
+        && chmod +x ./.github/ci/scripts/setup-opendxp-environment.sh \
+        && ./.github/ci/scripts/setup-opendxp-environment.sh"
+
+    write_testkit_env
+}
+
+# CI runs this before composer, and a package whose own composer scripts call bin/console needs that
+# order: the script is what puts bin/console there. It can only run first when it copies nothing out
+# of vendor, and needing the framework is exactly when it does.
+if [ "$KIND" = bundle ] && [ "$NEEDS_FRAMEWORK" = false ]; then
+    setup_app
+fi
+
+write_testkit_env
+
+if [ "$RUN_COMPOSER" = true ]; then
+    COMPOSER_ARGS=()
+    [ "$PREFER_LOWEST" = true ] && COMPOSER_ARGS+=(--lowest)
+    [ "$NEEDS_FRAMEWORK" = true ] && COMPOSER_ARGS+=(--framework)
+    ddev opendxp-tests-composer "$SLOT" "$PHP_VERSION" "${APP_REL:-.}" "${COMPOSER_ARGS[@]}"
+fi
+
+if [ "$KIND" = bundle ] && [ "$NEEDS_FRAMEWORK" = true ]; then
+    setup_app
+fi
+
+if [ "$RUN_COMPOSER" = true ]; then
+    ddev exec bash -c "cd /var/www/html/$APP \
+        && ./bin/console cache:clear --no-interaction \
+        && ./bin/console assets:install public --relative --symlink \
+        && { [ -d var/classes ] && ./bin/console opendxp:build:classes --no-interaction || true; } \
+        && { [ -f phpstan.neon ] && vendor/bin/phpstan clear-result-cache -c phpstan.neon >/dev/null 2>&1 \
+             || vendor/bin/phpstan clear-result-cache -c ../phpstan.neon >/dev/null 2>&1 || true; }"
+fi
+
+cp .ddev/apache/.htaccess "$APP/public/.htaccess" 2>/dev/null || true
+
+[ -d "assets-test" ] && ln -sfn "$(realpath assets-test)" "$APP/public/assets-test" || true
+
+if [ ! -f "GeoLite2-City.mmdb" ]; then
+    wget -q -c https://raw.githubusercontent.com/wp-statistics/GeoLite2-City/master/GeoLite2-City.mmdb.gz -O GeoLite2-City.mmdb.gz
+    gunzip GeoLite2-City.mmdb.gz
+fi
+
+mkdir -p "$APP/var/config"
+cp GeoLite2-City.mmdb "$APP/var/config/GeoLite2-City.mmdb"
+
+OUT="$SLOT_ROOT/tests/_output"
+mkdir -p "$OUT"
+
+TASK="${ARGS[0]:-codecept}"
+ARGS=("${ARGS[@]:1}")
+STATUS=0
+
+run_task() {
+    case "$1" in
+        codecept|codecept-xdebug)
+            ddev opendxp-tests-dispatcher "$SLOT" "$PORT" "$DATABASE" "$PHP_VERSION" "$DATABASE_HOST" "${APP_REL:-.}" "$1" --xml=report.xml "${ARGS[@]}"
+            ;;
+        phpstan)
+            ddev opendxp-tests-dispatcher "$SLOT" "$PORT" "$DATABASE" "$PHP_VERSION" "$DATABASE_HOST" "${APP_REL:-.}" phpstan "${ARGS[@]}"
+            ;;
+        deptrac)
+            ddev exec -s deptrac sh -c "cd /src/slot-$SLOT && deptrac analyse --config-file=deptrac.yaml --no-progress --formatter=junit --output=tests/_output/deptrac.junit.xml"
+            ddev exec -s deptrac sh -c "cd /src/slot-$SLOT && deptrac analyse --config-file=deptrac.yaml --no-progress --formatter=graphviz-image --output=tests/_output/deptrac.png" >/dev/null 2>&1 || true
+            ;;
+        arkitect)
+            ddev exec -s phparkitect sh -c "cd /src/slot-$SLOT && phparkitect check --config=phparkitect.php --no-ansi" 2>&1 | tee "$OUT/arkitect.txt"
+            return "${PIPESTATUS[0]}"
+            ;;
+        *)
+            echo "Usage: ddev opendxp-tests-run <path or bundle> codecept|codecept-xdebug|phpstan|deptrac|arkitect|all [args]" >&2
+            return 1
+            ;;
+    esac
+}
+
+if [ "$TASK" = all ]; then
+    for t in codecept phpstan deptrac arkitect; do
+        run_task "$t" || STATUS=$?
+    done
+else
+    run_task "$TASK" || STATUS=$?
+fi
+
+ddev exec php /var/www/html/.ddev/tools/index.php "$SLOT_ROOT" "$NAME" >/dev/null
+
+echo ""
+echo "report: $(ddev exec printenv DDEV_PRIMARY_URL | tr -d '\r')/analysis/slot-$SLOT.html"
+
+exit "$STATUS"

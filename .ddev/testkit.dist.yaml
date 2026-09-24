@@ -1,0 +1,39 @@
+# What this testkit offers. Copy any key you want to change into testkit.yaml, which is not
+# versioned; what is not named there is taken from here.
+#
+# Changing anything below needs one `ddev restart`, which empties the slots: the ports, the fpm
+# pools and the database services are written from this file when the containers come up, and
+# never afterwards.
+
+# Optional shortcut. A run may then name a bundle that lives in one of these directories instead of
+# giving its path. Paths keep working either way.
+roots: []
+
+# How many runs may happen at the same time. Each one gets its own directory, database and port.
+slots: 5
+
+php:
+    # Only versions the web container carries: 8.2, 8.3, 8.4, 8.5.
+    versions: ["8.3", "8.4", "8.5"]
+    default: "8.4"
+
+databases:
+    # mysql is the server ddev brings. Every other name here becomes a service of its own.
+    mysql: "8.4"
+    mariadb: "10.7"
+    default: mysql
+
+# Packages to take from a local checkout instead of the released version. composer links them
+# into vendor, so an edit there is live in the next run. Only needed while you work on the
+# package itself.
+#paths:
+    # open-dxp/opendxp-codeception-framework: /absolute/path/to/the/checkout
+
+# Containers a suite needs beside the application. The name is the host name inside the network.
+services:
+    redis: redis:7-alpine
+
+# Handed to the web container, where the tests read it. For what a suite expects, look at what its
+# CI workflow sets.
+environment:
+    OPENDXP_TEST_REDIS_DSN: "redis://redis:6379"

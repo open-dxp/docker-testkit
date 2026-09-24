@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+
+## Description: What this testkit offers, and whether the browser has drifted
+## Usage: opendxp-doctor
+## Example: "ddev opendxp-doctor"
+## ExecRaw: true
+
+set -e
+
+. "$(dirname "$0")/../../scripts/testkit-lib.sh"
+
+say() { printf '  %-12s %s\n' "$1" "$2"; }
+
+echo ""
+say "slots" "$TESTKIT_SLOTS"
+say "php" "$TESTKIT_PHP_VERSIONS  (default $TESTKIT_PHP_DEFAULT)"
+NAMES=""
+for pair in $TESTKIT_DB_HOSTS; do NAMES="$NAMES ${pair%%:*}"; done
+say "databases" "$(echo $NAMES)  (default $TESTKIT_DB_DEFAULT)"
+
+for version in $TESTKIT_PHP_VERSIONS; do
+    ddev exec test -S "/run/php/testkit-$version.sock" 2>/dev/null \
+        || say "" "php $version has no running pool, run ddev restart"
+done
+
+# CI takes whatever chrome its runner image carries, so there is no version to agree with, only a
+# distance to keep small.
+CHROME=$(docker exec "ddev-${DDEV_SITENAME:-$(basename "$PWD")}-selenium-chrome" \
+    google-chrome --version 2>/dev/null | grep -oP '\d+' | head -1)
+
+if [ -z "$CHROME" ]; then
+    say "chrome" "not running"
+else
+    STABLE=$(curl -fsSL "https://versionhistory.googleapis.com/v1/chrome/platforms/linux/channels/stable/versions" 2>/dev/null \
+        | jq -r '.versions[0].version' 2>/dev/null | cut -d. -f1)
+
+    if [ -n "$STABLE" ] && [ "$((STABLE - CHROME))" -gt 2 ]; then
+        say "chrome" "$CHROME, $((STABLE - CHROME)) versions behind stable. Pull the selenium image."
+    else
+        say "chrome" "$CHROME (stable is ${STABLE:-?})"
+    fi
+fi
+
+echo ""
+
+STALE=0
+
+for SLOT in $(ls -d app/slot-* 2>/dev/null | sed 's|app/slot-||' | sort -n); do
+    KEY=$(testkit_slot_key "$SLOT")
+    SIZE=$(du -sm "app/slot-$SLOT" | cut -f1)
+    USED=$(testkit_slot_used "$SLOT")
+    STATE="free"
+
+    if [ -n "$KEY" ]; then
+        STATE="$KEY, last used $(( ($(date +%s) - USED) / 3600 ))h ago"
+    elif testkit_slot_stale "$SLOT"; then
+        STATE="stale"
+        STALE=$((STALE + 1))
+    fi
+
+    printf '  slot %-3s %6s MB  %s\n' "$SLOT" "$SIZE" "$STATE"
+done
+
+if [ "$STALE" -gt 0 ]; then
+    echo ""
+    echo "  Stale slots: $STALE. ddev opendxp-tests-clean gives the disk back."
+fi
+
+echo ""
