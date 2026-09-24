@@ -66,6 +66,16 @@ DATABASE=$(testkit_database "$SLOT")
 SLOT_ROOT="app/slot-$SLOT"
 APP="$SLOT_ROOT${APP_REL:+/$APP_REL}"
 
+# Written on the way out, whatever happened: a failing task, a signal, a caller that gave up waiting.
+# Called at the end only, a run that is cut short leaves the page of the run before it.
+write_report() {
+    ddev exec php /var/www/html/.ddev/tools/index.php "$SLOT_ROOT" "$NAME" >/dev/null 2>&1 || true
+}
+
+trap write_report EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 _LOCK=$(testkit_slot_lock_file "$SLOT")
 exec 9>"$_LOCK"
 
@@ -226,8 +236,6 @@ if [ "$TASK" = all ]; then
 else
     run_task "$TASK" || STATUS=$?
 fi
-
-ddev exec php /var/www/html/.ddev/tools/index.php "$SLOT_ROOT" "$NAME" >/dev/null
 
 echo ""
 echo "report: $(ddev exec printenv DDEV_PRIMARY_URL | tr -d '\r')/analysis/slot-$SLOT.html"
