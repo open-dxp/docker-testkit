@@ -8,16 +8,24 @@ set -e
 SLOT="$1"
 PORT="$2"
 DATABASE="$3"
-shift 3
+PHP_VERSION="$4"
+DATABASE_HOST="$5"
+APP_REL="$6"
+[ "$APP_REL" = "." ] && APP_REL=""
+shift 6
 
-APP="/var/www/html/app/slot-$SLOT"
+PHP="/usr/bin/php$PHP_VERSION"
+
+ROOT="/var/www/html/app/slot-$SLOT"
+APP="$ROOT${APP_REL:+/$APP_REL}"
+VENDOR="${APP_REL:+$APP_REL/}vendor"
 APP_IP="$(ip addr show eth0 | grep 'inet\b' | awk '{print $2}' | cut -d/ -f1)"
 
 export WEBDRIVER_HOST="selenium-chrome"
 export WEBDRIVER_URL="http://$APP_IP:$PORT/"
 export OPENDXP_PROJECT_ROOT="$APP"
 export OPENDXP_CLASS_DIRECTORY="$APP/var/classes"
-export OPENDXP_TEST_DB_DSN="mysql://db:db@db/$DATABASE"
+export OPENDXP_TEST_DB_DSN="mysql://db:db@$DATABASE_HOST/$DATABASE"
 export OPENDXP_INSTALL_MYSQL_DATABASE="$DATABASE"
 
 case "$1" in
@@ -29,7 +37,7 @@ case "$1" in
         cd "$APP"
         # A capped limit, not -1: an unbounded run grows until the kernel needs memory and the
         # OOM killer takes the largest other process on the machine, which is the developer's IDE.
-        /usr/bin/php -d memory_limit=3G vendor/bin/codecept run -c . --env local "${@:2}"
+        "$PHP" -d memory_limit=3G vendor/bin/codecept run -c "$ROOT" --env local "${@:2}"
         ;;
     codecept-xdebug)
         echo ""
@@ -37,19 +45,28 @@ case "$1" in
         echo "run codeception tests with xdebug - slot $SLOT"
         echo "*************************************************************************"
         cd "$APP"
-        PHP_IDE_CONFIG="serverName=opendxp.test" /usr/bin/php -dxdebug.remote_enable=1 -dxdebug.remote_autostart=On -dxdebug.idekey=PHPSTORM -dxdebug.remote_host=$2 -d memory_limit=3G vendor/bin/codecept run -c . --env local "${@:3}"
+        PHP_IDE_CONFIG="serverName=opendxp.test" "$PHP" -dxdebug.remote_enable=1 -dxdebug.remote_autostart=On -dxdebug.idekey=PHPSTORM -dxdebug.remote_host=$2 -d memory_limit=3G vendor/bin/codecept run -c "$ROOT" --env local "${@:3}"
         ;;
     phpstan)
         echo ""
         echo "*************************************************************************"
         echo "run phpstan - slot $SLOT"
         echo "*************************************************************************"
+        # phpstan.neon resolves its paths against the working directory.
         cd "$APP"
+        NEON="phpstan.neon"
+        [ -f "$NEON" ] || NEON="$ROOT/phpstan.neon"
+
         bin/console cache:warmup --env=test --no-optional-warmers
-        php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon "${@:2}"
+        mkdir -p "$ROOT/tests/_output"
+        "$PHP" -d memory_limit=2G vendor/bin/phpstan analyse -c "$NEON" "${@:2}" || STATUS=$?
+        # A second pass against a warm result cache costs almost nothing and gives the report JUnit.
+        "$PHP" -d memory_limit=2G vendor/bin/phpstan analyse -c "$NEON" --no-progress \
+            --error-format=junit "${@:2}" > "$ROOT/tests/_output/phpstan.junit.xml" || true
+        exit "${STATUS:-0}"
         ;;
     *)
-        echo "Usage: ddev opendxp-tests-run <bundle> codecept|codecept-xdebug|phpstan [args]" >&2
+        echo "Usage: ddev opendxp-tests-run <path or bundle> codecept|codecept-xdebug|phpstan [args]" >&2
         exit 1
         ;;
 esac

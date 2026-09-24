@@ -1,54 +1,71 @@
 #!/usr/bin/env bash
 
-# A workspace is a directory, a database and a port that belong together and never change:
-# slot 7 is always app/slot-7, db_slot_7 and port 31007. They are declared in
-# .ddev/apache/testkit-slots.conf and read when the container starts, so nothing has to be
-# configured while a run is going on. What moves is only which bundle sits in which slot.
+# A slot is a directory, a database and a port that belong together. They are written into the
+# apache config when the container starts, so nothing is configured while a run is going on.
 
-TESTKIT_SLOTS=10
+. "$(dirname "${BASH_SOURCE[0]}")/../testkit.env"
+
 TESTKIT_SLOT_FILE=".ddev/slots.tsv"
 
-testkit_env() {
-    ddev exec printenv "$1" 2>/dev/null | tr -d '\r'
+testkit_locate() {
+    local name="$1" root
+
+    for root in $TESTKIT_ROOTS; do
+        [ -d "$root/$name" ] && { printf '%s' "$root/$name"; return 0; }
+    done
+
+    echo "Error: no directory at '$name', and none by that name in ${TESTKIT_ROOTS:-the roots, which are empty}" >&2
+    return 1
 }
 
-testkit_bundle_root() {
-    testkit_env TEST_BUNDLE_LOCAL_PATH
-}
-
-testkit_bundle_dir() {
-    printf '%s/%s' "$(testkit_bundle_root)" "$1"
-}
 
 testkit_port() {
-    printf '%d' $((31000 + $1))
+    local slot="$1" version="$2" index=1 v
+
+    for v in $TESTKIT_PHP_VERSIONS; do
+        [ "$v" = "$version" ] && break
+        index=$((index + 1))
+    done
+
+    printf '%d' $((index * 10000 + 21000 + slot))
+}
+
+testkit_php_known() {
+    local v
+    for v in $TESTKIT_PHP_VERSIONS; do
+        [ "$v" = "$1" ] && return 0
+    done
+    echo "Error: php $1 is not offered. testkit.yaml has: $TESTKIT_PHP_VERSIONS" >&2
+    return 1
+}
+
+testkit_db_host() {
+    local pair
+    for pair in $TESTKIT_DB_HOSTS; do
+        [ "${pair%%:*}" = "$1" ] && { printf '%s' "${pair#*:}"; return 0; }
+    done
+    echo "Error: database $1 is not offered. testkit.yaml has: ${TESTKIT_DB_HOSTS//:*/}" >&2
+    return 1
 }
 
 testkit_database() {
     printf 'db_slot_%d' "$1"
 }
 
-testkit_require_bundle() {
-    local bundle="$1" command="$2"
-
-    if [ -z "$bundle" ]; then
-        echo "Error: no bundle given." >&2
-        echo "Usage: ddev $command <bundle> ..." >&2
-        echo "Available:" >&2
-        ls -1 "$(testkit_bundle_root)" 2>/dev/null | sed 's/^/  /' >&2
-        return 1
-    fi
-
-    if [ ! -d "$(testkit_bundle_dir "$bundle")" ]; then
-        echo "Error: no such bundle: $(testkit_bundle_dir "$bundle")" >&2
-        return 1
-    fi
+testkit_slot_key() {
+    awk -F'\t' -v s="$1" '$1 == s { print $2; exit }' "$TESTKIT_SLOT_FILE" 2>/dev/null
 }
 
-# A bundle keeps the slot it had, so its vendor directory is still there next time. Only a bundle
-# that has never run takes a free slot, and only when none is free does the one idle longest go.
-# Held under a lock of its own: this is short, and two bundles starting at once must not pick the
-# same number.
+testkit_slot_used() {
+    awk -F'\t' -v s="$1" '$1 == s { print $3; exit }' "$TESTKIT_SLOT_FILE" 2>/dev/null
+}
+
+testkit_slot_lock_file() {
+    printf '%s/opendxp-tests-%s-slot-%s.lock' "${TMPDIR:-/tmp}" "$(id -u)" "$1"
+}
+
+# A lock of its own, held only while a number is picked: two runs starting at the same moment must
+# not pick the same slot.
 testkit_claim_slot() {
     local bundle="$1" slot="" taken="" n now
     now=$(date +%s)
@@ -71,6 +88,17 @@ testkit_claim_slot() {
         done
     fi
 
+    # Oldest first, but skip what is running: evicting a busy slot means waiting for that run to
+    # finish and then throwing away an installation that is demonstrably in use.
+    if [ -z "$slot" ]; then
+        for n in $(sort -t"$(printf '\t')" -k3,3n "$TESTKIT_SLOT_FILE" | cut -f1); do
+            if flock -n "$(testkit_slot_lock_file "$n")" true 2>/dev/null; then
+                slot="$n"
+                break
+            fi
+        done
+    fi
+
     if [ -z "$slot" ]; then
         slot=$(sort -t"$(printf '\t')" -k3,3n "$TESTKIT_SLOT_FILE" | head -1 | cut -f1)
     fi
@@ -86,57 +114,100 @@ testkit_claim_slot() {
     printf '%s' "$slot"
 }
 
-# Whether the slot held a different bundle before. Its vendor directory belongs to that one and
-# has to go with it.
 testkit_slot_changed() {
-    [ ! -f "app/slot-$1/composer.json" ] && return 0
-    [ "$(cut -f2 <<<"$(awk -F'\t' -v s="$1" '$1 == s' "$TESTKIT_SLOT_FILE")")" != "$2" ]
+    local key="$1" app_rel="$2" slot
+
+    slot=$(awk -F'\t' -v k="$key" '$2 == k { print $1; exit }' "$TESTKIT_SLOT_FILE" 2>/dev/null)
+
+    [ -z "$slot" ] || [ ! -d "app/slot-$slot${app_rel:+/$app_rel}/vendor" ]
+}
+
+# "db" is ddev's own server, which only answers through ddev. The others are plain containers.
+testkit_mysql() {
+    local host="$1" sql="$2"
+
+    if [ "$host" = "db" ]; then
+        ddev mysql -uroot -proot -e "$sql" >/dev/null 2>&1
+        return
+    fi
+
+    docker exec "ddev-${DDEV_SITENAME:-$(basename "$PWD")}-$host" \
+        mysql -uroot -proot -e "$sql" >/dev/null 2>&1
 }
 
 testkit_ensure_database() {
-    ddev mysql -uroot -proot -e "
+    testkit_mysql "$2" "
         CREATE DATABASE IF NOT EXISTS \`$1\`;
         GRANT ALL ON \`$1\`.* TO 'db'@'%';
         FLUSH PRIVILEGES;
-    " >/dev/null 2>&1
+    "
 }
 
-# Only what the bundle is. vendor stays unless the slot changed hands, which is what makes a
-# second run on the same bundle quick.
-testkit_sync_bundle() {
-    local bundle="$1" slot="$2" keep_vendor="$3" target source
-    source="$(testkit_bundle_dir "$bundle")"
-    target="app/slot-$slot"
+testkit_reset_database() {
+    testkit_mysql "$2" "DROP DATABASE IF EXISTS \`$1\`;"
+    testkit_ensure_database "$1" "$2"
+}
+
+# A slot's database lives on whichever server it last ran against, which nothing records, so all of
+# them are asked.
+testkit_release_slot() {
+    local slot="$1" pair
+
+    for pair in $TESTKIT_DB_HOSTS; do
+        testkit_mysql "${pair#*:}" "DROP DATABASE IF EXISTS \`$(testkit_database "$slot")\`;"
+    done
+
+    rm -rf "app/slot-$slot"
+
+    # Apache serves the slot from this directory and refuses to start without it. A slot above the
+    # configured count has no vhost, so it is simply gone.
+    [ "$slot" -le "$TESTKIT_SLOTS" ] && mkdir -p "app/slot-$slot/public"
+
+    if [ -f "$TESTKIT_SLOT_FILE" ]; then
+        awk -F'\t' -v s="$slot" '$1 != s' "$TESTKIT_SLOT_FILE" > "$TESTKIT_SLOT_FILE.tmp"
+        mv "$TESTKIT_SLOT_FILE.tmp" "$TESTKIT_SLOT_FILE"
+    fi
+}
+
+testkit_slot_stale() {
+    local slot="$1"
+
+    [ -n "$(testkit_slot_key "$slot")" ] && return 1
+    [ "$slot" -gt "$TESTKIT_SLOTS" ] && return 0
+    [ "$(du -sm "app/slot-$slot" | cut -f1)" -gt 1 ]
+}
+
+# The exclude list comes from git status, not from rsync's --filter=':- .gitignore'. rsync reads a
+# .gitignore per directory and never the ones above the directory being synced, and it applies the
+# first matching rule where git applies the last, which inverts every "!" exception.
+testkit_sync() {
+    local source="$1" slot="$2" keep_vendor="$3" app_rel="$4"
+    local target="app/slot-$slot"
+    local prefix vendor=()
+
+    case "$source" in ""|/) echo "Error: refusing to sync from '$source'" >&2; return 1 ;; esac
 
     mkdir -p "$target"
+    # vendor and var hold what this slot generated and are not in the source, so --delete would
+    # take them every run. Protecting them stops the deletion, not the writing.
+    if [ "$keep_vendor" = "true" ]; then
+        vendor=(
+            --filter="protect /${app_rel:+$app_rel/}vendor/***"
+            --filter="protect /${app_rel:+$app_rel/}var/***"
+        )
+    fi
 
-    local vendor=()
-    [ "$keep_vendor" = "true" ] && vendor=(--exclude="/vendor")
+    prefix=$(git -C "$source" rev-parse --show-prefix)
 
-    rsync -a --info=stats1 \
-        --delete \
-        "${vendor[@]}" \
-        --exclude="opendxp-codeception-framework" \
-        --exclude="/var" \
-        --exclude="/tests/_data/downloads" \
-        --exclude="/.deptrac.cache" \
-        --exclude="docs" \
-        --include="SKILL.md" \
-        --exclude="*.md" \
-        --exclude=".git" \
-        --exclude=".gitattributes" \
-        --exclude=".gitignore" \
-        --exclude=".php-cs-fixer-finder.dist.php" \
-        "$source/" \
-        "$target/"
+    git -C "$source" status --porcelain --ignored . \
+        | sed -n "s|^!! ${prefix}||p" \
+        | rsync -a --info=stats1 --delete \
+            --exclude-from=- \
+            --filter="protect /tests/_output/***" \
+            "${vendor[@]}" \
+            "$source/" "$target/"
 
-    ln -sfn "$(testkit_env OPENDXP_CODECEPTION_FRAMEWORK_LOCAL_PATH)" "$target/opendxp-codeception-framework"
-
-    # Headless chrome writes to its own download directory whatever it is told, and there is one
-    # of those per browser, not per slot. Every slot reads the same one through this link.
+    # Headless chrome ignores the download directory it is given and writes to its own.
     mkdir -p "$target/tests/_data"
     ln -sfn ../../../../.ddev/downloads "$target/tests/_data/downloads"
-
-    # So a human can see which slot holds what.
-    ln -sfn "slot-$slot" "app/$bundle"
 }

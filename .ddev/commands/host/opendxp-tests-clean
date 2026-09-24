@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+## Description: Empty slots, giving back their disk and dropping their databases
+## Usage: opendxp-tests-clean [<name or path> | --all] [--fail-if-busy]
+## Example: "ddev opendxp-tests-clean formbuilder-bundle"
+## Example: "ddev opendxp-tests-clean --all"
+## ExecRaw: true
+
+set -e
+
+. "$(dirname "$0")/../../scripts/testkit-lib.sh"
+
+TARGET=""
+FAIL_IF_BUSY=false
+SLOTS=()
+
+for arg in "$@"; do
+    case "$arg" in
+        --fail-if-busy) FAIL_IF_BUSY=true ;;
+        *)              TARGET="$arg" ;;
+    esac
+done
+
+case "$TARGET" in
+    --all)
+        for dir in app/slot-*; do
+            [ -d "$dir" ] && SLOTS+=("${dir#app/slot-}")
+        done
+        ;;
+    "")
+        for dir in app/slot-*; do
+            [ -d "$dir" ] || continue
+            slot="${dir#app/slot-}"
+            testkit_slot_stale "$slot" && SLOTS+=("$slot")
+        done
+        ;;
+    *)
+        [ -d "$TARGET" ] && TARGET=$(basename "$TARGET")
+
+        while IFS=$'\t' read -r slot key _; do
+            [ "${key%%|*}" = "$TARGET" ] && SLOTS+=("$slot")
+        done < "$TESTKIT_SLOT_FILE"
+
+        if [ ${#SLOTS[@]} -eq 0 ]; then
+            echo "Nothing is held for '$TARGET'. ddev opendxp-doctor lists what is." >&2
+            exit 1
+        fi
+        ;;
+esac
+
+if [ ${#SLOTS[@]} -eq 0 ]; then
+    exit 0
+fi
+
+# ddev runs this with --fail-if-busy on the way down, where releasing only part of the slots would
+# leave a half empty testkit still running. Everything stays and the stop is refused instead.
+if [ "$FAIL_IF_BUSY" = true ]; then
+    BUSY=()
+
+    for slot in "${SLOTS[@]}"; do
+        flock -n "$(testkit_slot_lock_file "$slot")" true 2>/dev/null || BUSY+=("$slot")
+    done
+
+    if [ ${#BUSY[@]} -gt 0 ]; then
+        for slot in "${BUSY[@]}"; do
+            echo "slot $slot is running $(testkit_slot_key "$slot")" >&2
+        done
+
+        echo "Nothing was released." >&2
+        exit 1
+    fi
+fi
+
+for slot in $(printf '%s\n' "${SLOTS[@]}" | sort -n); do
+    exec 9>"$(testkit_slot_lock_file "$slot")"
+
+    if ! flock -n 9; then
+        echo "slot $slot is running $(testkit_slot_key "$slot"), left alone"
+        continue
+    fi
+
+    key=$(testkit_slot_key "$slot")
+    echo "released slot $slot${key:+  $key}"
+    testkit_release_slot "$slot"
+    rm -f app/public/analysis/slot-$slot.html app/public/analysis/slot-$slot-*.png
+
+    flock -u 9
+    exec 9>&-
+done
