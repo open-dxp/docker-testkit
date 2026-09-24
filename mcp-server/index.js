@@ -319,13 +319,19 @@ async function callTool(name, args) {
                 }
             }
 
+            // A task without its config file is skipped by the command, not failed. Passed on as it
+            // stands, so "run everything" does not come back as two broken tools.
+            for (const [, task] of result.output.matchAll(/^([a-z-]+): not configured$/gm)) {
+                lines.push(`${task}: not configured in this package`);
+            }
+
             const arkitect = readArkitect(slot, startedAt);
 
             if (arkitect) {
                 lines.push('arkitect:', arkitect);
             }
 
-            if (results.length === 0 && arkitect === null) {
+            if (lines.length === 0 && arkitect === null) {
                 lines.push(result.output.trim().split('\n').slice(-25).join('\n'));
             }
 

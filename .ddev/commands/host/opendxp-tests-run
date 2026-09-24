@@ -169,7 +169,34 @@ TASK="${ARGS[0]:-codecept}"
 ARGS=("${ARGS[@]:1}")
 STATUS=0
 
+# Every tool is driven by a file in the package. No file, nothing configured, and a run of all four
+# should say so rather than fail on the two a bundle never set up.
+task_configured() {
+    case "$1" in
+        codecept|codecept-xdebug)
+            compgen -G "$TEST_ROOT/codeception*.y*ml" >/dev/null
+            ;;
+        phpstan)
+            [ -f "$TEST_ROOT/phpstan.neon" ] || [ -f "$TEST_ROOT/${APP_REL:+$APP_REL/}phpstan.neon" ]
+            ;;
+        deptrac)
+            [ -f "$TEST_ROOT/deptrac.yaml" ] || [ -f "$TEST_ROOT/deptrac.yml" ]
+            ;;
+        arkitect)
+            [ -f "$TEST_ROOT/phparkitect.php" ]
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
 run_task() {
+    if ! task_configured "$1"; then
+        echo "$1: not configured"
+        return 0
+    fi
+
     case "$1" in
         codecept|codecept-xdebug)
             ddev opendxp-tests-dispatcher "$SLOT" "$PORT" "$DATABASE" "$PHP_VERSION" "$DATABASE_HOST" "${APP_REL:-.}" "$1" --xml=report.xml "${ARGS[@]}"
