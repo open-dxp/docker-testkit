@@ -180,7 +180,8 @@ function readArkitect(slot, since) {
 const TOOLS = [
     {
         name: 'list_bundles',
-        description: 'The bundles this testkit can run, and which workspace each one currently holds.',
+        description: 'The packages that can be named without a path, because they sit in a configured root. '
+            + 'Anything else is run by giving run_tests its path, so this is a convenience and not a list of what works.',
         inputSchema: {type: 'object', properties: {}, required: []},
     },
     {
@@ -238,12 +239,21 @@ async function callTool(name, args) {
                 .filter((d) => fs.existsSync(path.join(root, d, 'composer.json')))
                 .map((d) => (held[d] ? `${d} (slot ${held[d]})` : d)));
 
+            if (bundles.length === 0) {
+                return {
+                    content: [{type: 'text', text: 'No roots are configured. Give run_tests a path instead of a name.'}],
+                };
+            }
+
             return {
                 content: [{
                     type: 'text',
-                    text: bundles.length
-                        ? bundles.join('\n')
-                        : 'No roots are configured in testkit.yaml. Give run_tests a path instead of a name.',
+                    text: [
+                        `Named without a path because they sit in ${roots.join(', ')}.`,
+                        'A package anywhere else is run by giving run_tests its path.',
+                        '',
+                        ...bundles,
+                    ].join('\n'),
                 }],
             };
         }
