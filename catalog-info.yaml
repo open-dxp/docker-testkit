@@ -1,0 +1,10 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+    name: docker-testkit
+    description: Runs the tests of an OpenDXP bundle or project in an isolated workspace.
+spec:
+    type: tool
+    lifecycle: production
+    owner: team-opendxp
+    system: opendxp
