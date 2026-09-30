@@ -1,0 +1,11 @@
+# The browser the acceptance tests drive, and the driver that talks to it. Both live in the image so
+# they survive a restart and no test run has to download them.
+#
+# Two module paths because ddev keeps its global npm packages under its own node prefix, while the
+# conventional location is the other one.
+ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright
+ENV NODE_PATH=/usr/local/n/lib/node_modules:/usr/local/lib/node_modules
+
+RUN npm install -g playwright@1 \
+    && npx --yes playwright@1 install --with-deps chromium \
+    && chmod -R a+rx /usr/local/share/playwright

@@ -7,16 +7,8 @@ router_http_port: "80"
 router_https_port: "443"
 composer_version: "2"
 fail_on_hook_fail: true
-additional_fqdns:
-    - 'opendxp-testing.test'
-additional_hostnames:
-    - 'test-domain1.test'
-    - 'test-domain2.test'
-    - 'test-domain3.test'
-    - 'test-domain4.test'
-    - 'test-domain5.test'
-    - 'test-domain6.test'
-    - 'test-domain7.test'
+additional_fqdns: []
+additional_hostnames: []
 database:
     type: mysql
     version: '8.4'
@@ -25,21 +17,16 @@ hooks:
         -   exec-host: "echo 'Booting Test System'"
         -   exec-host: "mkdir -p app/public && touch app/public/index.php"
         -   exec-host: "python3 .ddev/scripts/testkit-generate.py"
-        -   exec-host: "mkdir -p .ddev/downloads && chmod 777 .ddev/downloads"
 
     post-start:
         -   exec: "/mnt/ddev_config/scripts/testkit-fpm.sh"
         -   exec: "test -d /var/www/html/mcp-server/node_modules || npm --prefix /var/www/html/mcp-server install --omit=dev --no-audit --no-fund"
 
     pre-stop:
-        -   exec-host: "ddev opendxp-tests-clean --all --fail-if-busy"
+        -   exec-host: "ddev release --all --fail-if-busy"
 
 web_environment:
 
     # bin/console does not pick this up from the slot's .env, so it has to be in the real
     # environment. Without it the kernel boots in dev and the test configuration never loads.
     - APP_ENV=test
-
-    # The browser writes downloads here and FileGeneratorHelper reads them back, so both containers
-    # have to agree on the path. The selenium side is set in docker-compose.selenium-chrome.yaml.
-    - WEBDRIVER_DOWNLOAD_PATH=/home/seluser/Downloads

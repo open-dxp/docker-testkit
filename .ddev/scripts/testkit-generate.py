@@ -4,43 +4,23 @@
 version and the compose file for the extra database servers. Runs before the containers start,
 so nothing has to be configured while they are up."""
 
-import json
 import pathlib
-import subprocess
-import re
 import sys
+
+import yaml
 
 DDEV = pathlib.Path(__file__).resolve().parent.parent
 
 
 def read_config() -> dict:
-    """A small reader for the shape this one file has: no anchors, no nesting beyond two levels."""
+    """The dist file says what the testkit offers, testkit.yaml overrides what a developer changed."""
     config: dict = {}
 
     for name in ("testkit.dist.yaml", "testkit.yaml"):
         path = DDEV / name
 
-        if not path.exists():
-            continue
-
-        section = None
-
-        for line in path.read_text().splitlines():
-            if not line.strip() or line.lstrip().startswith("#"):
-                continue
-
-            key, _, value = line.partition(":")
-            value = value.split("#")[0].strip()
-
-            if not line.startswith(" "):
-                section = key.strip()
-                if value:
-                    config[section] = json.loads(value) if value.startswith("[") else value.strip('"\'')
-                else:
-                    config.setdefault(section, {})
-            else:
-                target = config.setdefault(section, {})
-                target[key.strip()] = json.loads(value) if value.startswith("[") else value.strip('"\'')
+        if path.exists():
+            config.update(yaml.safe_load(path.read_text()) or {})
 
     return config
 
@@ -144,43 +124,40 @@ if environment:
 
 (DDEV / "docker-compose.services.yaml").write_text("\n".join(compose) + "\n")
 
-def dev_version_of(location: str) -> str:
-    """A checkout carries no release number, so composer names it after the branch it is on. A
-    branch that reads like a version becomes "1.x-dev", anything else becomes "dev-my-branch"."""
-    try:
-        branch = subprocess.run(["git", "-C", location, "branch", "--show-current"],
-                                capture_output=True, text=True, check=True).stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        branch = ""
+# Composer writes the path of a path repository into vendor as a symlink target, so host and
+# container have to agree on where a checkout lives. Mounting each one onto itself is the only
+# arrangement where that holds without translating paths back and forth. The roots hold the
+# packages under test, `paths:` names single packages to take from a working copy, and both are
+# read from inside the container.
+declared = list(dict.fromkeys(
+    [pathlib.Path(root) for root in config.get("roots") or []]
+    + [pathlib.Path(location) for location in (config.get("paths") or {}).values()]
+))
 
-    if not branch:
-        return "dev-HEAD"
+# A checkout named under `paths:` usually lies in a root already. Mounting it a second time
+# would nest one bind mount inside another for no gain, so only the outermost ones are kept.
+checkouts = [
+    str(where) for where in declared
+    if not any(other != where and other in where.parents for other in declared)
+]
+header = "# Written by testkit-generate.py from testkit.yaml. Do not edit.\n"
 
-    return f"{branch}-dev" if re.fullmatch(r"v?\d+(\.[\dx]+)*", branch) else f"dev-{branch}"
+mounted = ["web"]
 
-
-# A local checkout composer should link into vendor has to be visible in the container first.
-paths = config.get("paths", {})
-mounts = ["# Written by testkit-generate.py from testkit.yaml. Do not edit.\n", "services:", "    web:", "        volumes:"]
-
-for package, location in paths.items():
-    mounts.append(f'            - "{location}:/mnt/testkit-paths/{package}"')
-
-(DDEV / "docker-compose.paths.yaml").write_text(
-    "\n".join(mounts) + "\n" if paths else
-    "# Written by testkit-generate.py from testkit.yaml. Do not edit.\n# No local paths configured.\n"
+(DDEV / "docker-compose.mounts.yaml").write_text(
+    header + "\n".join([
+        "",
+        "services:",
+        *(
+            line
+            for service in mounted
+            for line in [f"    {service}:", "        volumes:"]
+            + [f'            - "{where}:{where}"' for where in checkouts]
+        ),
+    ]) + "\n" if checkouts else header + "# Nothing to mount.\n"
 )
 
-# The same numbers again, in a shape the shell can read without parsing yaml.
-(DDEV / "testkit.env").write_text(
-    f"TESTKIT_SLOTS={slots}\n"
-    f"TESTKIT_PHP_VERSIONS=\"{' '.join(versions)}\"\n"
-    f"TESTKIT_PHP_DEFAULT={config['php']['default']}\n"
-    f"TESTKIT_DB_DEFAULT={config['databases']['default']}\n"
-    f"TESTKIT_DB_HOSTS=\"{' '.join(f'{n}:{"db" if n == "mysql" else n}' for n in databases)}\"\n"
-    f"TESTKIT_PATHS=\"{' '.join(f'{k}={dev_version_of(v)}' for k, v in paths.items())}\"\n"
-    f"TESTKIT_ROOTS=\"{' '.join(config.get('roots', []) or [])}\"\n"
-)
+(DDEV / "docker-compose.roots.yaml").unlink(missing_ok=True)
 
 for slot in range(1, slots + 1):
     (DDEV.parent / "app" / f"slot-{slot}" / "public").mkdir(parents=True, exist_ok=True)

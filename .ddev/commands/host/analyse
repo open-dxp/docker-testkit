@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+## Description: Run the static checks: lint, and what the package configures
+## Usage: analyse <path or name> [lint|phpstan|deptrac|phparkitect] [-- tool args]
+## Example: "ddev analyse toolbox-bundle"
+## Example: "ddev analyse content-crafter-bundle deptrac"
+## ExecRaw: true
+
+exec python3 "$(dirname "$0")/../../scripts/analyse.py" "$@"

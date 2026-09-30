@@ -11,7 +11,6 @@ Thumbs.db
 *.log
 
 node_modules
-/.ddev/analysis/*/vendor/
 
 /app
 /data
@@ -21,11 +20,10 @@ GeoLite2-City.mmdb.gz
 
 .ddev/.env
 .ddev/testkit.yaml
-.ddev/downloads/
-.ddev/slots.tsv
-.ddev/testkit.env
+.ddev/slots.json
 .ddev/fpm/
 .ddev/apache/testkit-slots.conf
 .ddev/docker-compose.databases.yaml
 .ddev/docker-compose.services.yaml
-.ddev/docker-compose.paths.yaml
+.ddev/docker-compose.mounts.yaml
+.ddev/scripts/__pycache__/

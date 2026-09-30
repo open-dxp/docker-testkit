@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 /**
- * Renders what a slot's last run left behind. Codeception, phpstan and deptrac all write JUnit,
- * so one reader covers three of the four tools. phparkitect has no machine readable format, so
- * its console output is shown as it is.
+ * Renders what a slot's last run left behind. Pest, phpstan and deptrac all write JUnit, so one
+ * reader covers three of the four tools. phparkitect has no machine readable format, so its
+ * console output is shown as it is.
  */
 
 $root = '/var/www/html';
@@ -18,7 +18,8 @@ if ($slotDir === '' || !is_dir("$root/$slotDir")) {
 }
 
 $slot = basename($slotDir);
-$output = "$root/$slotDir/tests/_output";
+// Beside the application, not below tests: a run copies the tests in afresh every time.
+$output = "$root/$slotDir/var/report";
 $target = "$root/app/public/analysis";
 
 @mkdir($target, 0775, true);
@@ -54,7 +55,7 @@ function readJUnit(string $file): ?array
 }
 
 $tools = [
-    'codeception' => ['file' => "$output/report.xml", 'about' => 'Tests. Suites in codeception.dist.yml.'],
+    'pest'        => ['file' => "$output/pest.junit.xml", 'about' => 'Tests. The suite is defined in phpunit.xml.dist.'],
     'phpstan'     => ['file' => "$output/phpstan.junit.xml", 'about' => 'Types and reachability. Rules in phpstan.neon.'],
     'deptrac'     => ['file' => "$output/deptrac.junit.xml", 'about' => 'Which layer may depend on which. Rules in deptrac.yaml.'],
 ];

@@ -1,8 +1,0 @@
-{
-    "require": {
-        "phparkitect/phparkitect": "^0.3"
-    },
-    "config": {
-        "sort-packages": true
-    }
-}

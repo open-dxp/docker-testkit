@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+## Description: Empty a slot, or every slot, including its database
+## Usage: release [<package>] [--all] [--fail-if-busy]
+## Example: "ddev release --all"
+## ExecRaw: true
+
+exec python3 "$(dirname "$0")/../../scripts/clean.py" "$@"

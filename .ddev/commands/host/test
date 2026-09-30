@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+## Description: Run the tests of a bundle or project in a slot of its own
+## Usage: test <path or name> [--php 8.4] [--db mysql] [--fresh] [-- pest args]
+## Example: "ddev test toolbox-bundle"
+## Example: "ddev test toolbox-bundle --php 8.5 -- --filter=Headline"
+## ExecRaw: true
+
+exec python3 "$(dirname "$0")/../../scripts/run.py" "$@"

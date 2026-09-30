@@ -2,18 +2,26 @@
 # versioned; what is not named there is taken from here.
 #
 # Changing anything below needs one `ddev restart`, which empties the slots: the ports, the fpm
-# pools and the database services are written from this file when the containers come up, and
-# never afterwards.
+# pools and the database services are written from this file when the containers come up.
 
-# Optional shortcut. A run may then name a bundle that lives in one of these directories instead of
-# giving its path. Paths keep working either way.
-roots: []
+# Where the local checkouts live. Every directory below a root that has a composer.json is
+# offered to composer as a path repository, so a package under test resolves against the working
+# copy next to it instead of against the released version.
+roots: ["/home/shagspiel/Projects/opendxp.io/skeleton/lib"]
+
+# Packages to take from a local checkout instead of from the registry. Composer links the
+# checkout into vendor, so an edit there is live in the next run.
+#
+# Name a package here only while you work on that package itself. Whoever writes tests names
+# nothing: then every package, the test foundation included, is installed at the version the
+# package under test asks for in its composer.json.
+#paths:
+#    open-dxp/test-foundation: /absolute/path/to/the/checkout
 
 # How many runs may happen at the same time. Each one gets its own directory, database and port.
 slots: 5
 
 php:
-    # Only versions the web container carries: 8.2, 8.3, 8.4, 8.5.
     versions: ["8.3", "8.4", "8.5"]
     default: "8.4"
 
@@ -23,17 +31,10 @@ databases:
     mariadb: "10.7"
     default: mysql
 
-# Packages to take from a local checkout instead of the released version. composer links them
-# into vendor, so an edit there is live in the next run. Only needed while you work on the
-# package itself.
-#paths:
-    # open-dxp/opendxp-codeception-framework: /absolute/path/to/the/checkout
-
 # Containers a suite needs beside the application. The name is the host name inside the network.
 services:
     redis: redis:7-alpine
 
-# Handed to the web container, where the tests read it. For what a suite expects, look at what its
-# CI workflow sets.
+# Handed to the web container, where the tests read it.
 environment:
     OPENDXP_TEST_REDIS_DSN: "redis://redis:6379"
