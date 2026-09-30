@@ -286,7 +286,7 @@ def workspace(name: str, php: str | None = None, database: str | None = None, fr
         build = (
             fresh
             or replaced
-            or dependencies_are_stale(roots, local, built)
+            or dependencies_are_stale(target.root, local, built)
         )
 
         if fresh and slot.path.exists():
@@ -307,7 +307,7 @@ def workspace(name: str, php: str | None = None, database: str | None = None, fr
             "TEST_DOMAIN": "opendxp-testing.test",
         }
 
-        write(slot.path, target, roots, local, environment)
+        write(slot.path, target, local, config.get("registry"), environment)
 
         # Before the build: installing OpenDXP boots the kernel, and the kernel is one of the
         # files that arrives with the tests. A project's tests come with its mirror already.

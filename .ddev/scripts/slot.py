@@ -13,37 +13,6 @@ from target import BUNDLE, PROJECT, Target
 FOUNDATION = "open-dxp/test-foundation"
 
 
-def path_repositories(roots: list[Path]) -> list[dict]:
-    """Every local checkout below a root, offered to composer. It only takes what something requires.
-
-    The test foundation is passed over even when it lies in a root. Every test in every repository
-    stands on it, so which copy a run uses is declared under `paths:` and never inferred from where
-    a checkout happens to sit.
-    """
-    found = []
-
-    for root in roots:
-        for manifest in sorted(root.glob("*/composer.json")):
-            try:
-                declared = json.loads(manifest.read_text())
-            except ValueError as broken:
-                # Composer refuses the whole run over one unreadable manifest, which would
-                # make an unrelated repository untestable.
-                print(f"skipping {manifest.parent.name}: {broken}", file=sys.stderr)
-                continue
-
-            if declared.get("name") == FOUNDATION:
-                continue
-
-            found.append({
-                "type": "path",
-                "url": str(manifest.parent),
-                "options": {"symlink": True},
-            })
-
-    return found
-
-
 def local_checkouts(config: dict) -> dict[str, Path]:
     """Packages to take from a working copy instead of from the registry, named under `paths:`.
 
@@ -134,7 +103,7 @@ def tests_namespace(package_manifest: Path) -> str:
     )
 
 
-def optional_of(package_manifest: Path, offered: set[str]) -> list[str]:
+def optional_of(package_manifest: Path) -> list[str]:
     """Packages a package's tests can exercise but must never require.
 
     `require-dev` would make them a condition for contributing, and `suggest` speaks to the
@@ -145,7 +114,7 @@ def optional_of(package_manifest: Path, offered: set[str]) -> list[str]:
     extra = json.loads(package_manifest.read_text()).get("extra", {})
     wanted = extra.get("opendxp-test", {}).get("optional", [])
 
-    return [name for name in wanted if name in offered]
+    return list(wanted)
 
 
 def require_dev_of(package_manifest: Path) -> list[str]:
@@ -153,21 +122,18 @@ def require_dev_of(package_manifest: Path) -> list[str]:
     return [name for name in dev if name != FOUNDATION and "/" in name]
 
 
-def dependencies_are_stale(roots: list[Path], local: dict[str, Path], built: Path) -> bool:
+def dependencies_are_stale(target: Path, local: dict[str, Path], built: Path) -> bool:
     """Whether the installed dependencies still match what the packages ask for.
 
-    Every package here is a path repository, so its requirements can change on disk while the
-    slot stays as it was. Composer cannot see that, so a manifest newer than the last build means
-    the slot has to resolve again. The stamp is the reference and not the slot's lock file: the
+    The package under test and every checkout named under `paths:` are path repositories, so their
+    requirements can change on disk while the slot stays as it was. Composer cannot see that, so a
+    manifest newer than the last build means the slot has to resolve again. The stamp is the reference and not the slot's lock file: the
     build writes the slot's own manifest, which would otherwise always look newer than the lock.
     """
     if not built.is_file():
         return True
 
-    watched = [
-        (checkout / "composer.json")
-        for checkout in [Path(r["url"]) for r in path_repositories(roots)] + list(local.values())
-    ]
+    watched = [checkout / "composer.json" for checkout in [target, *local.values()]]
 
     return max(m.stat().st_mtime for m in watched) > built.stat().st_mtime
 
@@ -225,7 +191,8 @@ def mirror(root: Path, slot: Path) -> None:
         here.unlink()
 
 
-def write(slot: Path, target: Target, roots: list[Path], local: dict[str, Path], env: dict[str, str]) -> None:
+def write(slot: Path, target: Target, local: dict[str, Path], registry: str | None,
+          env: dict[str, str]) -> None:
     slot.mkdir(parents=True, exist_ok=True)
 
     # A project needs nothing written: it is the application, and the mirror puts all of it here.
@@ -249,10 +216,15 @@ def write(slot: Path, target: Target, roots: list[Path], local: dict[str, Path],
     # from nothing has to create it before anything asks for it.
     (slot / "public").mkdir(exist_ok=True)
 
-    repositories = path_repositories(roots)
-    offered = {
-        json.loads((Path(r["url"]) / "composer.json").read_text())["name"] for r in repositories
-    }
+    # The package under test comes from your working copy, that is what a run is for. Everything
+    # else comes from the registry, unless you named it under `paths:`. The path repositories come
+    # first, because composer takes the first repository that can answer.
+    repositories = [
+        repository_of(where) for where in dict.fromkeys([target.root, *local.values()])
+    ]
+
+    if registry:
+        repositories.append({"type": "composer", "url": registry})
 
     # A declared checkout is a path repository, which outranks the registry whatever version is
     # asked for. Without one the package under test decides, the same as anywhere else.
@@ -269,14 +241,14 @@ def write(slot: Path, target: Target, roots: list[Path], local: dict[str, Path],
         "name": "open-dxp/test-slot",
         "type": "project",
         "description": f"Throwaway application for {target.package}.",
-        "repositories": repositories + [repository_of(c) for c in local.values()],
+        "repositories": repositories,
         # The slot exists to test this package, so it installs what the package needs to be
         # developed as well. Composer never does that for a dependency.
         "require": {
             target.package: "*",
             **required,
             **{name: "*" for name in require_dev_of(target.root / "composer.json")},
-            **{name: "*" for name in optional_of(target.root / "composer.json", offered)},
+            **{name: "*" for name in optional_of(target.root / "composer.json")},
         },
         "autoload": {
             # Where OpenDXP writes the php classes it generates from a class definition. Every

@@ -4,17 +4,15 @@
 # Changing anything below needs one `ddev restart`, which empties the slots: the ports, the fpm
 # pools and the database services are written from this file when the containers come up.
 
-# Where the local checkouts live. Every directory below a root that has a composer.json is
-# offered to composer as a path repository, so a package under test resolves against the working
-# copy next to it instead of against the released version.
-roots: ["/home/shagspiel/Projects/opendxp.io/skeleton/lib"]
+# Where your checkouts live, so a package can be named without its path. Name yours in
+# testkit.yaml. Without one, a package is named by its path.
+roots: []
 
-# Packages to take from a local checkout instead of from the registry. Composer links the
-# checkout into vendor, so an edit there is live in the next run.
-#
-# Name a package here only while you work on that package itself. Whoever writes tests names
-# nothing: then every package, the test foundation included, is installed at the version the
-# package under test asks for in its composer.json.
+# A composer repository besides packagist. Name yours in testkit.yaml.
+#registry:
+
+# Packages that come from your working copy instead of from the registry. The package you test
+# always does, and needs no entry here.
 #paths:
 #    open-dxp/test-foundation: /absolute/path/to/the/checkout
 
