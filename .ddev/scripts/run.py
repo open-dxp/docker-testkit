@@ -84,13 +84,31 @@ def must(command: list[str], where: Path, what: str,
         raise SystemExit(f"{what} failed")
 
 
-def ensure_database(name: str, host: str) -> None:
-    """Every slot gets a database of its own, so two runs never share a schema."""
+def free_slot(app: Path) -> None:
+    """A run stopped on the host leaves its process in the container, holding the database."""
+    subprocess.call(
+        ["ddev", "exec", "for p in /proc/[0-9]*; do "
+         f'[ "$(readlink $p/cwd)" = "{inside(app)}" ] && kill -9 "${{p#/proc/}}"; '
+         "done; true"],
+        cwd=TESTKIT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def reset_database(name: str, host: str) -> None:
+    """Every slot gets a database of its own, emptied before the application is installed into it.
+
+    A slot is reused for another package, and the tables of the one before would still be there.
+    Installing over them leaves a schema that belongs to neither, and a column whose type no
+    installed bundle registers any more stops the next install.
+    """
     subprocess.check_call(
         # No backticks around the name: ddev hands the command to a shell, which would read
         # them as a substitution. Slot names are plain identifiers, so none are needed.
         ["ddev", "exec", "mysql", f"--host={host}", "--user=root", "--password=root",
-         "-e", f"CREATE DATABASE IF NOT EXISTS {name}; GRANT ALL ON {name}.* TO 'db'@'%';"],
+         "-e", f"DROP DATABASE IF EXISTS {name}; CREATE DATABASE {name}; "
+               f"GRANT ALL ON {name}.* TO 'db'@'%';"],
         cwd=TESTKIT,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -316,6 +334,8 @@ def workspace(name: str, php: str | None = None, database: str | None = None, fr
 
         (app / "var" / "report").mkdir(parents=True, exist_ok=True)
 
+        free_slot(app)
+
         # The geo database, where an application expects it. A bundle that answers by country reads
         # it from there, and the CI puts it in the same place.
         geo = TESTKIT / "GeoLite2-City.mmdb"
@@ -327,7 +347,7 @@ def workspace(name: str, php: str | None = None, database: str | None = None, fr
             (app / "var" / "config" / geo.name).symlink_to(inside(geo))
 
         if build:
-            ensure_database(slot.database, host)
+            reset_database(slot.database, host)
 
             if target.kind == PROJECT:
                 install_project(app, local)
