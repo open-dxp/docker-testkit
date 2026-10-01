@@ -26,7 +26,6 @@ from slot import (  # noqa: E402
     substitutions_for,
     sync_tests,
     kernel_class,
-    tests_namespace,
     write,
 )
 from target import PROJECT, resolve  # noqa: E402
