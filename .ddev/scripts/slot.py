@@ -332,6 +332,7 @@ def sync_tests(slot: Path, target: Target) -> None:
     directory is gone from a package, that package is migrated.
     """
     here = slot / "tests"
+    before = built_from(here)
 
     if here.exists():
         shutil.rmtree(here)
@@ -342,4 +343,25 @@ def sync_tests(slot: Path, target: Target) -> None:
         ignore=shutil.ignore_patterns("_legacy"),
         symlinks=True,
     )
+
+    # A kernel booted without the debug flag never asks whether its container is still current, so
+    # it would keep answering from the configuration of the run before. Only the files the
+    # container is built from matter here, and they rarely change.
+    if built_from(here) != before:
+        cache = slot / "var" / "cache"
+
+        if cache.is_dir():
+            shutil.rmtree(cache)
+
+
+def built_from(tests: Path) -> dict[str, float]:
+    """What the application is built from, and when each of it was last written."""
+    if not tests.is_dir():
+        return {}
+
+    return {
+        str(file.relative_to(tests)): file.stat().st_mtime
+        for pattern in ("*.yaml", "*.yml", "*.php", "*.twig")
+        for file in tests.rglob(pattern)
+    }
 
