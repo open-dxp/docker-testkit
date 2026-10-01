@@ -54,7 +54,9 @@ def substitutions_for(manifest: Path, local: dict[str, Path]) -> dict[str, tuple
 
 
 def repository_of(checkout: Path) -> dict:
-    return {"type": "path", "url": str(checkout), "options": {"symlink": True}}
+    # Mirrored and not symlinked: OpenDXP derives its project root from where its own package
+    # lies, and through a symlink that resolves to the checkout instead of the slot.
+    return {"type": "path", "url": str(checkout), "options": {"symlink": False}}
 
 
 def foundation_constraint(package_manifest: Path) -> str:
