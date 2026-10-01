@@ -206,6 +206,14 @@ environment:
 
 The service name is its host name inside the network.
 
+A suite that answers by country reads the GeoLite2 city database. Put `GeoLite2-City.mmdb` in the
+testkit directory and every workspace gets it in `var/config`, where the application looks:
+
+```bash
+wget https://raw.githubusercontent.com/wp-statistics/GeoLite2-City/master/GeoLite2-City.mmdb.gz -O - \
+    | gunzip -c > GeoLite2-City.mmdb
+```
+
 ## Slots
 
 Five runs can happen at once. Each one gets a slot: its own directory, its own database, its own

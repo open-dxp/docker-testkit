@@ -316,6 +316,16 @@ def workspace(name: str, php: str | None = None, database: str | None = None, fr
 
         (app / "var" / "report").mkdir(parents=True, exist_ok=True)
 
+        # The geo database, where an application expects it. A bundle that answers by country reads
+        # it from there, and the CI puts it in the same place.
+        geo = TESTKIT / "GeoLite2-City.mmdb"
+
+        if geo.is_file():
+            (app / "var" / "config").mkdir(parents=True, exist_ok=True)
+            (app / "var" / "config" / geo.name).unlink(missing_ok=True)
+            # The link is read inside the container, so it has to name the path there.
+            (app / "var" / "config" / geo.name).symlink_to(inside(geo))
+
         if build:
             ensure_database(slot.database, host)
 
