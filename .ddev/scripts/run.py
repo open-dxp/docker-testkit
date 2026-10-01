@@ -167,7 +167,7 @@ def install_bundles(app) -> None:
     )
 
     if listing.returncode != 0:
-        raise SystemExit("could not read the bundle list")
+        raise SystemExit(f"could not read the bundle list:\n{listing.stderr or listing.stdout}")
 
     for bundle in json.loads(listing.stdout):
         if bundle["Enabled"] and bundle["Installable"] and not bundle["Installed"]:
@@ -305,7 +305,7 @@ def workspace(name: str, php: str | None = None, database: str | None = None, fr
         build = (
             fresh
             or replaced
-            or dependencies_are_stale(target.root, local, built)
+            or dependencies_are_stale(target.app or target.root, local, built)
         )
 
         if fresh and slot.path.exists():

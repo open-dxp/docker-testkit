@@ -148,15 +148,21 @@ def dependencies_are_stale(target: Path, local: dict[str, Path], built: Path) ->
 
     The package under test and every checkout named under `paths:` are path repositories, so their
     requirements can change on disk while the slot stays as it was. Composer cannot see that, so a
-    manifest newer than the last build means the slot has to resolve again. The stamp is the reference and not the slot's lock file: the
-    build writes the slot's own manifest, which would otherwise always look newer than the lock.
+    manifest newer than the last build means the slot has to resolve again. The stamp is the
+    reference and not the slot's lock file, which a build writes itself.
     """
     if not built.is_file():
         return True
 
     watched = [checkout / "composer.json" for checkout in [target, *local.values()]]
+    # A project keeps its manifest below the repository root, and a checkout named under `paths:`
+    # may be a directory that has none.
+    present = [m for m in watched if m.is_file()]
 
-    return max(m.stat().st_mtime for m in watched) > built.stat().st_mtime
+    if not present:
+        return True
+
+    return max(m.stat().st_mtime for m in present) > built.stat().st_mtime
 
 
 # What a run writes into the slot and what no repository tracks. public belongs here because the
