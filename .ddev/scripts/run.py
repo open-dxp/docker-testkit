@@ -25,6 +25,7 @@ from slot import (  # noqa: E402
     local_checkouts,
     substitutions_for,
     sync_tests,
+    kernel_class,
     tests_namespace,
     write,
 )
@@ -296,7 +297,7 @@ def workspace(name: str, php: str | None = None, database: str | None = None, fr
     with slots.held(slot):
         app = application(slot.path, target)
         # A bundle declares its tests in its own manifest, a project in the application's.
-        kernel = f"{tests_namespace((target.app or target.root) / 'composer.json')}TestKernel"
+        kernel = kernel_class(target.app or target.root)
         # A build that stopped half way leaves a vendor directory and a lock file behind, which
         # is enough to look finished. Only the stamp says a slot really is, and it is written
         # last, once the application is installed and can be booted.

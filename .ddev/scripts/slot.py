@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -100,6 +101,26 @@ def tests_namespace(package_manifest: Path) -> str:
     raise SystemExit(
         f"{package_manifest} declares no autoload-dev psr-4 entry for tests/. "
         "Add one, for example \"OpenDxp\\\\Bundle\\\\ToolboxBundle\\\\Tests\\\\\": \"tests/\"."
+    )
+
+
+def kernel_class(package: Path) -> str:
+    """The kernel a package's tests boot, read from the phpunit configuration it ships."""
+    for name in ("phpunit.xml", "phpunit.xml.dist"):
+        configuration = package / name
+
+        if not configuration.is_file():
+            continue
+
+        found = re.search(r'name="KERNEL_CLASS" value="([^"]+)"', configuration.read_text())
+
+        if found:
+            return found.group(1)
+
+    raise SystemExit(
+        f"{package} names no KERNEL_CLASS. Add it to the <php> section of phpunit.xml.dist, "
+        'for example <env name="KERNEL_CLASS" value="OpenDxp\\Bundle\\ToolboxBundle'
+        '\\Tests\\Application\\TestKernel"/>.'
     )
 
 
