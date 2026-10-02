@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 namespace Testkit;
 
+use FilesystemIterator;
+use RecursiveCallbackFilterIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
+
 final readonly class SlotApplication
 {
     private const string COMPOSER = '/usr/local/bin/composer';
@@ -56,6 +62,22 @@ final readonly class SlotApplication
     public function phpCommand(string ...$arguments): array
     {
         return ['php' . $this->phpVersion, ...array_values($arguments)];
+    }
+
+    /**
+     * A bundle's baseline already lands in the source copy through the symlink in vendor. A project's lands in the slot.
+     */
+    public function copyBaselinesToSource(int $writtenSince): void
+    {
+        if (!$this->target->isProject) {
+            return;
+        }
+
+        foreach ($this->findFilesOutsideVendor($this->slot->path, 'phpstan-baseline.neon') as $baseline) {
+            if (filemtime($baseline) >= $writtenSince) {
+                copy($baseline, $this->target->sourceDirectory . substr($baseline, strlen($this->slot->path)));
+            }
+        }
     }
 
     public function buildOrUpdate(bool $fresh, bool $tookOverSlot): void
@@ -234,6 +256,26 @@ final readonly class SlotApplication
         }
 
         return hash('sha256', implode("\0", $inputs));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function findFilesOutsideVendor(string $directory, string $fileName): array
+    {
+        $found = [];
+        $entries = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(
+            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
+            static fn (SplFileInfo $entry): bool => !in_array($entry->getFilename(), ['vendor', 'var', 'node_modules'], true),
+        ));
+
+        foreach ($entries as $entry) {
+            if ($entry->getFilename() === $fileName) {
+                $found[] = $entry->getPathname();
+            }
+        }
+
+        return $found;
     }
 
     /**

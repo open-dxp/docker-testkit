@@ -56,13 +56,28 @@ function runTests(Configuration $configuration, Slots $slots, string $key, Argum
 function runAnalysis(Configuration $configuration, Slots $slots, string $key, Arguments $arguments): int
 {
     $check = $arguments->positional[1] ?? null;
+    $writeBaseline = $arguments->has('baseline');
 
-    return runInSlot($configuration, $slots, $key, $arguments, static function (SlotApplication $application) use ($check): int {
-        return ProcessRunner::run(
-            $application->phpCommand('vendor/bin/opendxp-test', 'analyse', $application->packageDirectory(), ...($check !== null ? [$check] : [])),
+    return runInSlot($configuration, $slots, $key, $arguments, static function (SlotApplication $application) use ($check, $writeBaseline): int {
+        $startedAt = time();
+
+        $exitCode = ProcessRunner::run(
+            $application->phpCommand(
+                'vendor/bin/opendxp-test',
+                'analyse',
+                $application->packageDirectory(),
+                ...($check !== null ? [$check] : []),
+                ...($writeBaseline ? ['--baseline'] : []),
+            ),
             $application->applicationDirectory(),
             $application->runEnvironment(),
         );
+
+        if ($writeBaseline && $exitCode === 0) {
+            $application->copyBaselinesToSource($startedAt);
+        }
+
+        return $exitCode;
     });
 }
 

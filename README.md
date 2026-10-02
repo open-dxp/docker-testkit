@@ -50,7 +50,7 @@ Inside the testkit directory, `ddev test`, `ddev analyse`, `ddev release` and `d
 
 ```
 testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [-- pest arguments]
-testkit analyse [path] [lint|phpstan|deptrac|phparkitect] [--php 8.3] [--db mariadb]
+testkit analyse [path] [lint|phpstan|deptrac|phparkitect] [--baseline] [--php 8.3] [--db mariadb]
 testkit status
 testkit release [path | --all]
 ```
@@ -66,6 +66,9 @@ testkit test -- --exclude-group=browser
 `analyse` runs `lint` always: the container, the YAML configuration and the Twig templates. It runs
 phpstan when the package has a `phpstan.neon`, deptrac when it has a `deptrac.yaml` and phparkitect
 when it has a `phparkitect.php`. Name one check to run only that one.
+
+`analyse --baseline` writes the PHPStan baseline beside the package's `phpstan.neon` into your
+checkout. It is the only command that writes into a checkout.
 
 `--fresh` builds the slot again from nothing. Use it when a dependency was released and you want it.
 

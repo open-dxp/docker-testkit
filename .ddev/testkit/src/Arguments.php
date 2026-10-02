@@ -8,7 +8,7 @@ use RuntimeException;
 
 final readonly class Arguments
 {
-    private const array FLAGS = ['--fresh', '--all', '--fail-if-busy'];
+    private const array FLAGS = ['--fresh', '--all', '--fail-if-busy', '--baseline'];
     private const array OPTIONS = ['--php', '--db', '--tag', '--run'];
 
     /**

@@ -64,6 +64,7 @@ const TOOLS = [
             properties: {
                 path: location,
                 check: {type: 'string', enum: ['lint', 'phpstan', 'deptrac', 'phparkitect'], description: 'One check. Leave out for all of them.'},
+                baseline: {type: 'boolean', description: 'Write the PHPStan baseline into the checkout instead of reporting. Everything PHPStan finds becomes accepted, so this is a decision, not a fix.'},
                 php,
                 database,
             },
@@ -107,7 +108,9 @@ const handlers = {
         'test', path, ...options(rest), '--', '--colors=never',
         ...(filter ? (filter.startsWith('tests/') ? [filter] : ['--filter', filter]) : []),
     ]),
-    run_analysis: ({path, check, ...rest}) => testkit(['analyse', path, ...(check ? [check] : []), ...options(rest)]),
+    run_analysis: ({path, check, baseline, ...rest}) => testkit([
+        'analyse', path, ...(check ? [check] : []), ...(baseline ? ['--baseline'] : []), ...options(rest),
+    ]),
     release_slots: ({path}) => testkit(['release', path ?? '--all']),
     testkit_status: () => testkit(['status']),
 };
