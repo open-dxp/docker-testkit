@@ -87,7 +87,11 @@ case $command in
         # The copy has no .git, so its newest tag travels along. It decides which version the copy reports.
         tag=$(git -C "$target" describe --tags --abbrev=0 2> /dev/null || true)
 
-        in_container "$command" "$key" --tag "$tag" "$@"
+        # A run stopped here would go on in the container and hold its slot, so it is ended there too.
+        run_id=$$-$RANDOM
+        trap 'in_container abort "$run_id" > /dev/null 2>&1; exit 130' INT TERM
+
+        in_container "$command" "$key" --tag "$tag" --run "$run_id" "$@"
         ;;
     release)
         if [ "${1:-}" = --all ]; then

@@ -66,6 +66,51 @@ function runAnalysis(Configuration $configuration, Slots $slots, string $key, Ar
     });
 }
 
+/**
+ * Makes this process the leader of its own process group, so an abort reaches everything it started.
+ */
+function registerRun(Arguments $arguments): void
+{
+    $runId = $arguments->options['run'] ?? null;
+
+    if ($runId === null) {
+        return;
+    }
+
+    posix_setsid();
+    $runFile = runFile($runId);
+    file_put_contents($runFile, (string) getmypid());
+    register_shutdown_function(static fn () => @unlink($runFile));
+}
+
+function abortRun(string $runId): int
+{
+    $processGroup = (int) @file_get_contents(runFile($runId));
+
+    if ($processGroup < 1) {
+        return 0;
+    }
+
+    posix_kill(-$processGroup, SIGTERM);
+
+    for ($waited = 0; $waited < 50 && posix_kill(-$processGroup, 0); ++$waited) {
+        usleep(100_000);
+    }
+
+    if (posix_kill(-$processGroup, 0)) {
+        posix_kill(-$processGroup, SIGKILL);
+    }
+
+    @unlink(runFile($runId));
+
+    return 0;
+}
+
+function runFile(string $runId): string
+{
+    return APPLICATIONS_DIRECTORY . '/.locks/run-' . basename($runId);
+}
+
 function printStatus(Configuration $configuration, Slots $slots): int
 {
     printf("php        %s (default %s)\n", implode(', ', $configuration->phpVersions), $configuration->defaultPhpVersion);
@@ -146,11 +191,16 @@ try {
     $arguments = Arguments::parse(array_slice($argv, 2));
     $key = $arguments->positional[0] ?? null;
 
+    if (in_array($argv[1] ?? null, ['test', 'analyse'], true)) {
+        registerRun($arguments);
+    }
+
     exit(match ($argv[1] ?? null) {
         'test' => runTests($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
         'analyse' => runAnalysis($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
         'status' => printStatus($configuration, $slots),
         'release' => releaseSlots($slots, $arguments),
+        'abort' => abortRun($key ?? throw new RuntimeException('Name a run.')),
         default => throw new RuntimeException('Commands: test, analyse, status, release.'),
     });
 } catch (Throwable $exception) {

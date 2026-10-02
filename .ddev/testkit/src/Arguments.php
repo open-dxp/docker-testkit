@@ -9,7 +9,7 @@ use RuntimeException;
 final readonly class Arguments
 {
     private const array FLAGS = ['--fresh', '--all', '--fail-if-busy'];
-    private const array OPTIONS = ['--php', '--db', '--tag'];
+    private const array OPTIONS = ['--php', '--db', '--tag', '--run'];
 
     /**
      * @param list<string>          $flags      such as fresh or all
