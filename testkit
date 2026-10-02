@@ -29,7 +29,6 @@ in_container() {
     ddev exec -d /var/www/html "php .ddev/testkit/testkit.php $(printf '%q ' "$@")"
 }
 
-# Copies what git shows of a checkout, committed or not, and removes everything else from the copy.
 # git decides and not rsync, because rsync reads .gitignore without its ! exceptions.
 synchronise() {
     local files pid lock=$testkit/app/.locks/sync-$(basename "$2")
@@ -57,7 +56,6 @@ synchronise() {
     trap - EXIT
 }
 
-# The whole repository is the target, wherever inside it the run was started.
 repository_of() {
     git -C "$1" rev-parse --show-toplevel 2> /dev/null || {
         echo "$1 is not inside a git checkout." >&2

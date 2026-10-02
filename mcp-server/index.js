@@ -95,7 +95,7 @@ function testkit(args) {
     return {text: output || 'The testkit produced no output.', isError: result.status !== 0};
 }
 
-function options({php, database, fresh}) {
+function slotOptions({php, database, fresh}) {
     return [
         ...(php ? ['--php', php] : []),
         ...(database ? ['--db', database] : []),
@@ -105,11 +105,11 @@ function options({php, database, fresh}) {
 
 const handlers = {
     run_tests: ({path, filter, ...rest}) => testkit([
-        'test', path, ...options(rest), '--', '--colors=never',
+        'test', path, ...slotOptions(rest), '--', '--colors=never',
         ...(filter ? (filter.startsWith('tests/') ? [filter] : ['--filter', filter]) : []),
     ]),
     run_analysis: ({path, check, baseline, ...rest}) => testkit([
-        'analyse', path, ...(check ? [check] : []), ...(baseline ? ['--baseline'] : []), ...options(rest),
+        'analyse', path, ...(check ? [check] : []), ...(baseline ? ['--baseline'] : []), ...slotOptions(rest),
     ]),
     release_slots: ({path}) => testkit(['release', path ?? '--all']),
     testkit_status: () => testkit(['status']),

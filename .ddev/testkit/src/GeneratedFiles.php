@@ -17,8 +17,6 @@ final class GeneratedFiles
     }
 
     /**
-     * Writes the wanted files and deletes the generated ones no longer wanted.
-     *
      * @param array<string, string> $wantedFiles file name => content
      *
      * @return list<string> notices for the developer

@@ -30,9 +30,6 @@ final readonly class SlotApplication
             : $this->slot->path;
     }
 
-    /**
-     * The directory that holds phpstan.neon and the other configuration files of the target.
-     */
     public function packageDirectory(): string
     {
         return $this->target->isProject

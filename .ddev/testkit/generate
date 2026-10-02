@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-# Writes the compose files from testkit.yaml before the containers start. It runs in ddev's own web
-# image, so the host needs nothing but docker.
+# It runs in ddev's own web image, so the host needs nothing but docker.
 
 set -euo pipefail
 
