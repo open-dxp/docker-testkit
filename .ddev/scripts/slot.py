@@ -182,21 +182,26 @@ def application(slot: Path, target: Target) -> Path:
     return slot if target.kind == BUNDLE else slot / target.app.relative_to(target.root)
 
 
-def mirror(root: Path, slot: Path) -> None:
-    """Makes the slot hold the working copy, beside what a run generates.
+def mirror(root: Path, into: Path, keep_out: frozenset[str] = frozenset()) -> None:
+    """Makes a directory hold a working copy, beside what a run generates.
 
     Everything git would show is copied, committed or not, because a test run is what a developer
     reaches for while the work is still open. What git ignores stays behind: those are one machine's
-    artefacts, and a slot builds its own.
+    artefacts, and a slot builds its own. A directory named in `keep_out` is left alone in both
+    directions, neither copied nor deleted.
     """
     listing = subprocess.run(
         ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         capture_output=True, text=True, check=True,
     )
-    tracked = {name for name in listing.stdout.split("\0") if name}
+    untouched = GENERATED | keep_out
+    tracked = {
+        name for name in listing.stdout.split("\0")
+        if name and not set(Path(name).parts) & untouched
+    }
 
     for name in tracked:
-        source, here = root / name, slot / name
+        source, here = root / name, into / name
 
         if not source.is_file():
             continue
@@ -208,16 +213,33 @@ def mirror(root: Path, slot: Path) -> None:
         if not here.exists() or source.stat().st_mtime > here.stat().st_mtime:
             shutil.copy2(source, here)
 
-    for here in slot.rglob("*"):
+    for here in into.rglob("*"):
         if not here.is_file():
             continue
 
-        name = here.relative_to(slot)
+        name = here.relative_to(into)
 
-        if str(name) in tracked or set(name.parts) & GENERATED:
+        if str(name) in tracked or set(name.parts) & untouched:
             continue
 
         here.unlink()
+
+
+def mirror_packages(app: Path, target: Target, local: dict[str, Path]) -> None:
+    """Puts the working copy of every package that came from one over composer's mirror of it.
+
+    Composer builds that mirror from an archive, so `.gitattributes` export-ignore keeps files out
+    of it that a run needs, phpstan.neon among them, and it builds a new one only once the package
+    has a new commit. Both would hide the working copy from the slot.
+
+    The tests stay out: they are copied to the top of the slot, which is where the runner and the
+    autoloader look for them.
+    """
+    for package, checkout in {target.package: target.root, **local}.items():
+        here = app / "vendor" / package
+
+        if here.is_dir():
+            mirror(checkout, here, frozenset({"tests"}))
 
 
 def write(slot: Path, target: Target, local: dict[str, Path], registry: str | None,

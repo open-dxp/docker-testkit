@@ -85,8 +85,12 @@ def arguments(tool: str, slot, app: Path, target: Target, rest: list[str]) -> li
         return [*command, "-c", config, *rest]
 
     # Naming the sources is what makes phpstan read a bundle: without them the relative paths in
-    # the configuration find nothing and the run reports success over an empty file list.
-    sources = [f"vendor/{target.package}/src"] if target.kind == BUNDLE else []
+    # the configuration find nothing and the run reports success over an empty file list. A package
+    # that keeps them elsewhere, core among them, says so in its own configuration.
+    sources = []
+
+    if target.kind == BUNDLE and (app / "vendor" / target.package / "src").is_dir():
+        sources = [f"vendor/{target.package}/src"]
 
     return [*command, "-c", config, *rest, *sources]
 

@@ -180,8 +180,8 @@ workspace, so the next run of each package installs again.
 
 ### Working on a package your tests depend on
 
-`paths` takes a package from a working copy instead of from the registry. Composer links the
-checkout into `vendor`, so an edit there is live in the next run.
+`paths` takes a package from a working copy instead of from the registry, and the runner puts that
+working copy into `vendor` on every run, so an edit there is live in the next one.
 
 Name a package here only while you work on that package itself, which in practice means
 `open-dxp/test-foundation`. Name nothing and every package is installed at the version the package
@@ -264,23 +264,25 @@ Wait for the run to finish, then stop again.
 
 ## How your code gets into the workspace
 
-Each root is mounted into the web container at the same absolute path it has on your machine. Host
-and container therefore agree on where a checkout lives, which matters because composer writes that
-path into `vendor` as a symlink target.
+Each root is mounted into the web container at the same absolute path it has on your machine, so
+host and container agree on where a checkout lives.
 
 Every directory directly below a root that has a `composer.json` is offered to composer as a path
 repository, `open-dxp/test-foundation` excepted. The workspace requires the package under test, so
-composer links your working copy into `vendor` instead of installing a released version. Your edits
-are live in the next run, with no install step.
+composer installs your working copy instead of a released version.
+
+Composer builds that copy from an archive, which means `.gitattributes` export-ignore keeps files
+out of it and it is only built again once the package has a new commit. The runner therefore puts
+your working copy over it on every run, everything git would show, committed or not. An edit is live
+in the next run, and a file a release leaves out, `phpstan.neon` among them, is there.
+
+The tests are copied to the top of the workspace instead, because that is where the runner and the
+autoloader look for them. Pest names a test after its path below the workspace, and a path outside
+it turns every failure into an absolute path from your home directory.
 
 A project is the exception. It ships a lock file and its tests belong against what it ships, so the
 checkouts beside it are not offered and it is installed exactly as it is locked. Only a package
 named under `paths` is substituted.
-
-The tests are the one thing that is copied rather than linked. Pest names a test after its path
-below the workspace, and a symlink would resolve outside it, which turns every failure into an
-absolute path from your home directory. They are copied fresh on every run, so a run always sees the
-tests as they are now.
 
 Nothing is written back to your checkout. `app/` is scratch space and holds one directory per slot.
 

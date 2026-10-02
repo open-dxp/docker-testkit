@@ -23,6 +23,7 @@ from slot import (  # noqa: E402
     apply_template,
     dependencies_are_stale,
     local_checkouts,
+    mirror_packages,
     substitutions_for,
     sync_tests,
     kernel_class,
@@ -72,8 +73,13 @@ def prefixed(environment: dict[str, str] | None) -> list[str]:
 
 
 def run(command: list[str], where: Path, environment: dict[str, str] | None = None) -> int:
+    # OpenDXP works its project root out from where its own package lies, four directories up,
+    # which only holds while nothing on that path is a link. Bootstrap reads this before dotenv
+    # does, so it has to be on the command and not only in the .env.
+    at = {"OPENDXP_PROJECT_ROOT": inside(where), **(environment or {})}
+
     return subprocess.call(
-        ["ddev", "exec", "-d", inside(where), *prefixed(environment), *command], cwd=TESTKIT,
+        ["ddev", "exec", "-d", inside(where), *prefixed(at), *command], cwd=TESTKIT,
     )
 
 
@@ -160,7 +166,8 @@ def install_bundles(app) -> None:
     does this application.
     """
     listing = subprocess.run(
-        ["ddev", "exec", "-d", inside(app), *prefixed(WITHOUT_DEBUG),
+        ["ddev", "exec", "-d", inside(app),
+         *prefixed({"OPENDXP_PROJECT_ROOT": inside(app), **WITHOUT_DEBUG}),
          "bin/console", "opendxp:bundle:list", "--json"],
         cwd=TESTKIT, capture_output=True, text=True,
     )
@@ -323,6 +330,9 @@ def workspace(name: str, php: str | None = None, database: str | None = None, fr
             "DATABASE_SERVER_VERSION": str(config["databases"][database]),
             "TEST_TIMEZONE": "Europe/Zurich",
             "TEST_DOMAIN": "opendxp-testing.test",
+            # Without this OpenDXP works its project root out from where its own package lies,
+            # four directories up, which only holds while nothing on that path is a link.
+            "OPENDXP_PROJECT_ROOT": inside(app),
         }
 
         write(slot.path, target, local, config.get("registry"), environment)
@@ -358,9 +368,14 @@ def workspace(name: str, php: str | None = None, database: str | None = None, fr
                      app, "installing the dependencies")
                 apply_template(app, app / "vendor" / FOUNDATION)
 
+            # Before OpenDXP is installed: the installer reads the bundles, and what composer put
+            # under vendor is only what they look like at their last commit.
+            mirror_packages(app, target, local)
             install_opendxp(app, slot, environment, slot.database, host)
 
             built.touch()
+        else:
+            mirror_packages(app, target, local)
 
         yield slot, app, target
 
