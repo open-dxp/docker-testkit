@@ -203,7 +203,7 @@ function removeUnusedSources(Slots $slots): void
 try {
     $configuration = Configuration::load(dirname(__DIR__));
     $slots = new Slots(APPLICATIONS_DIRECTORY, $configuration->slots);
-    $arguments = Arguments::parse(array_slice($argv, 2));
+    $arguments = Arguments::parse(array_slice($argv, 2), ($argv[1] ?? null) === 'test');
     $key = $arguments->positional[0] ?? null;
 
     if (in_array($argv[1] ?? null, ['test', 'analyse'], true)) {

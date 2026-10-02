@@ -49,19 +49,21 @@ Inside the testkit directory, `ddev test`, `ddev analyse`, `ddev release` and `d
 ## Commands
 
 ```
-testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [-- pest arguments]
+testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [pest options and test paths]
 testkit analyse [path] [lint|phpstan|deptrac|phparkitect] [--baseline] [--php 8.3] [--db mariadb]
 testkit status
 testkit release [path | --all]
 ```
 
-Anything after `--` goes to Pest:
+Everything the testkit does not know goes to Pest as it stands:
 
 ```bash
-testkit test -- tests/Feature/Area/ImageTest.php
-testkit test -- --filter=Headline
-testkit test -- --exclude-group=browser
+testkit test tests/Feature/Area/ImageTest.php
+testkit test --filter=Headline
+testkit test --exclude-group=browser
 ```
+
+A path counts as the target only when it is a checkout, with a `composer.json` or a `.git`.
 
 `analyse` runs `lint` always: the container, the YAML configuration and the Twig templates. It runs
 phpstan when the package has a `phpstan.neon`, deptrac when it has a `deptrac.yaml` and phparkitect

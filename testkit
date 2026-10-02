@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
     cat >&2 <<'EOF'
-testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [-- pest arguments]
+testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [pest options and test paths]
 testkit analyse [path] [lint|phpstan|deptrac|phparkitect] [--baseline] [--php 8.3] [--db mariadb]
 testkit status
 testkit release [path | --all]
@@ -82,7 +82,8 @@ command=${1:-}
 case $command in
     test | analyse)
         target=$PWD
-        if [ $# -gt 0 ] && [ -d "$1" ]; then
+        # A checkout is the target. Any other path, such as tests/Feature/Cache, goes to Pest.
+        if [ $# -gt 0 ] && [ -d "$1" ] && { [ -f "$1/composer.json" ] || [ -e "$1/.git" ]; }; then
             target=$1
             shift
         fi
