@@ -9,24 +9,22 @@ composer_version: "2"
 fail_on_hook_fail: true
 additional_fqdns: []
 additional_hostnames: []
-database:
-    type: mysql
-    version: '8.4'
+
+# The database servers are services generated from testkit.yaml, so ddev's own one is not needed.
+omit_containers: [db]
+
 hooks:
     pre-start:
-        -   exec-host: "echo 'Booting Test System'"
         -   exec-host: "mkdir -p app/public && touch app/public/index.php"
-        -   exec-host: "python3 .ddev/scripts/testkit-generate.py"
+        -   exec-host: ".ddev/testkit/generate"
 
     post-start:
-        -   exec: "/mnt/ddev_config/scripts/testkit-fpm.sh"
         -   exec: "test -d /var/www/html/mcp-server/node_modules || npm --prefix /var/www/html/mcp-server install --omit=dev --no-audit --no-fund"
 
     pre-stop:
-        -   exec-host: "ddev release --all --fail-if-busy"
+        -   exec: "php /var/www/html/.ddev/testkit/testkit.php release --all --fail-if-busy"
 
 web_environment:
 
-    # bin/console does not pick this up from the slot's .env, so it has to be in the real
-    # environment. Without it the kernel boots in dev and the test configuration never loads.
+    # bin/console does not read APP_ENV from the .env of a slot before it boots the kernel.
     - APP_ENV=test

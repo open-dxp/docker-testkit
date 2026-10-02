@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+# Writes the compose files from testkit.yaml before the containers start. It runs in ddev's own web
+# image, so the host needs nothing but docker.
+
+set -euo pipefail
+
+ddev_directory=$(cd "$(dirname "$0")/.." && pwd)
+image=$(ddev version | awk '$1 == "web" { print $2 }')
+
+docker run --rm --user "$(id -u):$(id -g)" --volume "$ddev_directory:/ddev" "$image" php /ddev/testkit/generate.php

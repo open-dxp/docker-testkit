@@ -1,22 +1,8 @@
-# What this testkit offers. Copy any key you want to change into testkit.yaml, which is not
-# versioned; what is not named there is taken from here.
-#
-# Changing anything below needs one `ddev restart`, which empties the slots: the ports, the fpm
-# pools and the database services are written from this file when the containers come up.
+# What the testkit offers. Copy any key you want to change into testkit.yaml, which is not
+# versioned. Maps are merged key by key, lists are replaced. A change needs `ddev restart`, which
+# empties the slots.
 
-# Where your checkouts live, so a package can be named without its path. Name yours in
-# testkit.yaml. Without one, a package is named by its path.
-roots: []
-
-# A composer repository besides packagist. Name yours in testkit.yaml.
-#registry:
-
-# Packages that come from your working copy instead of from the registry. The package you test
-# always does, and needs no entry here.
-#paths:
-#    open-dxp/test-foundation: /absolute/path/to/the/checkout
-
-# How many runs may happen at the same time. Each one gets its own directory, database and port.
+# How many runs may happen at the same time.
 slots: 5
 
 php:
@@ -24,15 +10,19 @@ php:
     default: "8.4"
 
 databases:
-    # mysql is the server ddev brings. Every other name here becomes a service of its own.
-    mysql: "8.4"
-    mariadb: "10.7"
+    servers:
+        mysql: "8.4"
+        mariadb: "10.7"
     default: mysql
 
-# Containers a suite needs beside the application. The name is the host name inside the network.
-services:
-    redis: redis:7-alpine
+# A composer repository besides packagist, for closed-source packages.
+registry: ~
 
-# Handed to the web container, where the tests read it.
-environment:
-    OPENDXP_TEST_REDIS_DSN: "redis://redis:6379"
+# Packages taken from a checkout instead of from a registry, as package name: host path.
+composer_symlinks: {}
+
+# Services from the catalogue in .ddev/testkit/services, for example [redis, opensearch].
+services: []
+
+# The memory limit of the web container. All slots share it.
+memory: 8g

@@ -1,0 +1,10 @@
+services:
+    redis:
+        image: redis
+        container_name: ddev-${DDEV_SITENAME}-redis
+        labels:
+            com.ddev.site-name: ${DDEV_SITENAME}
+            com.ddev.approot: ${DDEV_APPROOT}
+    web:
+        environment:
+            - OPENDXP_TEST_REDIS_DSN=redis://redis:6379

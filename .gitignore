@@ -20,10 +20,5 @@ GeoLite2-City.mmdb.gz
 
 .ddev/.env
 .ddev/testkit.yaml
-.ddev/slots.json
-.ddev/fpm/
-.ddev/apache/testkit-slots.conf
-.ddev/docker-compose.databases.yaml
-.ddev/docker-compose.services.yaml
-.ddev/docker-compose.mounts.yaml
-.ddev/scripts/__pycache__/
+.ddev/docker-compose.*.yaml
+.claude/

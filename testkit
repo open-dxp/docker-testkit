@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+    cat >&2 <<'EOF'
+testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [-- pest arguments]
+testkit analyse [path] [lint|phpstan|deptrac|phparkitect] [--php 8.3] [--db mariadb]
+testkit status
+testkit release [path | --all]
+
+Without a path, the target is the current directory.
+EOF
+    exit 1
+}
+
+# Resolved through symlinks, so the script works when it is linked into the PATH.
+script=${BASH_SOURCE[0]}
+while [ -L "$script" ]; do
+    directory=$(cd -P "$(dirname "$script")" && pwd)
+    script=$(readlink "$script")
+    [[ $script == /* ]] || script=$directory/$script
+done
+testkit=$(cd -P "$(dirname "$script")" && pwd)
+
+in_container() {
+    cd "$testkit"
+    # ddev exec hands its arguments to a shell as one string, so each one is quoted here.
+    ddev exec -d /var/www/html "php .ddev/testkit/testkit.php $(printf '%q ' "$@")"
+}
+
+# Copies what git shows of a checkout, committed or not, and removes everything else from the copy.
+# git decides and not rsync, because rsync reads .gitignore without its ! exceptions.
+synchronise() {
+    local files pid lock=$testkit/app/.locks/sync-$(basename "$2")
+
+    # Two runs of the same checkout, with another PHP version or database, copy into the same place.
+    mkdir -p "$(dirname "$lock")"
+    until mkdir "$lock" 2> /dev/null; do
+        pid=$(cat "$lock/pid" 2> /dev/null) && ! kill -0 "$pid" 2> /dev/null && rm -rf "$lock"
+        sleep 0.2
+    done
+    echo $$ > "$lock/pid"
+    trap 'rm -rf "$lock"' EXIT
+
+    files=$(mktemp)
+
+    git -C "$1" ls-files --cached --others --exclude-standard \
+        | sed -e 's/[][*?\\]/\\&/g' -e 's|^|/|' > "$files"
+
+    mkdir -p "$2"
+    rsync -a --delete --delete-excluded --prune-empty-dirs \
+        --include-from="$files" --include='*/' --exclude='*' "$1/" "$2/"
+
+    rm -f "$files"
+    rm -rf "$lock"
+    trap - EXIT
+}
+
+# The whole repository is the target, wherever inside it the run was started.
+repository_of() {
+    git -C "$1" rev-parse --show-toplevel 2> /dev/null || {
+        echo "$1 is not inside a git checkout." >&2
+        exit 1
+    }
+}
+
+key_of() {
+    printf '%s-%s' "$(basename "$1")" "$(printf '%s' "$1" | cksum | cut -d ' ' -f 1)"
+}
+
+command=${1:-}
+[ $# -gt 0 ] && shift
+
+case $command in
+    test | analyse)
+        target=$PWD
+        if [ $# -gt 0 ] && [ -d "$1" ]; then
+            target=$1
+            shift
+        fi
+        target=$(repository_of "$target")
+        key=$(key_of "$target")
+
+        synchronise "$target" "$testkit/app/sources/$key"
+
+        # The copy has no .git, so its newest tag travels along. It decides which version the copy reports.
+        tag=$(git -C "$target" describe --tags --abbrev=0 2> /dev/null || true)
+
+        in_container "$command" "$key" --tag "$tag" "$@"
+        ;;
+    release)
+        if [ "${1:-}" = --all ]; then
+            in_container release --all
+        else
+            target=$(repository_of "${1:-$PWD}")
+            in_container release "$(key_of "$target")"
+        fi
+        ;;
+    status)
+        in_container status
+        ;;
+    *)
+        usage
+        ;;
+esac

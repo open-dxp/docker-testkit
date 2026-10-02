@@ -1,0 +1,15 @@
+services:
+    opensearch:
+        image: opensearchproject/opensearch:2
+        container_name: ddev-${DDEV_SITENAME}-opensearch
+        labels:
+            com.ddev.site-name: ${DDEV_SITENAME}
+            com.ddev.approot: ${DDEV_APPROOT}
+        environment:
+            discovery.type: single-node
+            DISABLE_SECURITY_PLUGIN: "true"
+            DISABLE_INSTALL_DEMO_CONFIG: "true"
+            OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    web:
+        environment:
+            - OPENDXP_OPEN_SEARCH_HOST=opensearch:9200

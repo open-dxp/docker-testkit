@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-## Description: What this testkit offers and what its slots hold
+## Description: What the testkit offers and what its slots hold
 ## Usage: slots
-## Example: "ddev slots"
 
-exec python3 "$(dirname "$0")/../../scripts/status.py"
+exec "$DDEV_APPROOT/testkit" status
