@@ -206,6 +206,27 @@ environment:
 
 The service name is its host name inside the network.
 
+A service that needs its own variables or a memory limit is written as a mapping:
+
+```yaml
+services:
+    redis: redis:7-alpine
+    opensearch:
+        image: opensearchproject/opensearch:2
+        mem_limit: 768m
+        environment:
+            discovery.type: single-node
+            DISABLE_SECURITY_PLUGIN: "true"
+            DISABLE_INSTALL_DEMO_CONFIG: "true"
+            OPENSEARCH_JAVA_OPTS: "-Xms256m -Xmx256m"
+
+environment:
+    OPENDXP_TEST_REDIS_DSN: "redis://redis:6379"
+    OPENDXP_OPEN_SEARCH_HOST: "opensearch:9200"
+```
+
+`services` in `testkit.yaml` replaces the whole list of the dist file, so name redis there as well.
+
 A suite that answers by country reads the GeoLite2 city database. Put `GeoLite2-City.mmdb` in the
 testkit directory and every workspace gets it in `var/config`, where the application looks:
 

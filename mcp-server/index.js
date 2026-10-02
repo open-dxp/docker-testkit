@@ -159,7 +159,9 @@ function runTests({bundle, filter, php, database, fresh}) {
     if (php) args.push('--php', php);
     if (database) args.push('--db', database);
     if (fresh) args.push('--fresh');
-    if (filter) args.push(filter);
+
+    // Everything behind -- belongs to pest. It takes a path as it is, anything else narrows by name.
+    if (filter) args.push('--', ...(filter.includes('/') ? [filter] : ['--filter', filter]));
 
     const {output} = ddev(args, 45 * 60 * 1000);
 

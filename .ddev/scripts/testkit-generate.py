@@ -107,15 +107,28 @@ services = config.get("services") or {}
 environment = config.get("environment") or {}
 compose = ["# Written by testkit-generate.py from testkit.yaml. Do not edit.\n", "services:"]
 
-for name, image in services.items():
+# A service is an image, or a mapping when the container needs its own variables or a memory limit.
+for name, service in services.items():
+    if isinstance(service, str):
+        service = {"image": service}
+
     compose.append(
         f"    {name}:\n"
-        f"        image: {image}\n"
+        f"        image: {service['image']}\n"
         f"        container_name: ddev-${{DDEV_SITENAME}}-{name}\n"
         f"        labels:\n"
         f"            com.ddev.site-name: ${{DDEV_SITENAME}}\n"
-        f"            com.ddev.approot: $DDEV_APPROOT\n"
+        f"            com.ddev.approot: $DDEV_APPROOT"
     )
+
+    if "mem_limit" in service:
+        compose.append(f"        mem_limit: {service['mem_limit']}")
+
+    if service.get("environment"):
+        compose.append("        environment:")
+        compose.extend(f"            - {key}={value}" for key, value in service["environment"].items())
+
+    compose.append("")
 
 if environment:
     compose.append("    web:\n        environment:")
