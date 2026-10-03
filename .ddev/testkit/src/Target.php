@@ -52,6 +52,11 @@ final readonly class Target
 
     public function foundationConstraint(): string
     {
+        // The foundation under test is the copy in the first repository, which hides every release.
+        if ($this->package === 'open-dxp/test-foundation') {
+            return '*';
+        }
+
         return self::readJson($this->manifestPath())['require-dev']['open-dxp/test-foundation']
             ?? throw new RuntimeException(sprintf('%s does not require open-dxp/test-foundation in require-dev.', $this->package));
     }
