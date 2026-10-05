@@ -82,7 +82,7 @@ A bundle or project uses `open-dxp/test-foundation`. Its `composer.json` require
 ```json
 {
     "require-dev": {
-        "open-dxp/test-foundation": "1.x-dev"
+        "open-dxp/test-foundation": "^1.0"
     },
     "autoload-dev": {
         "psr-4": {
