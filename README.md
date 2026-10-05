@@ -46,6 +46,11 @@ If you prefer not to change your PATH, an alias does the same:
 
 Inside the testkit directory, `ddev test`, `ddev analyse`, `ddev release` and `ddev slots` work as well. They need a path.
 
+## Versions
+
+The testkit is not a Composer package. The branch `2.x` is the current version. It installs the test
+foundation in the version the package requires.
+
 ## Commands
 
 ```
