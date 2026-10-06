@@ -79,6 +79,13 @@ checkout. It is the only command that writes into a checkout.
 
 `--fresh` builds the slot again from nothing. Use it when a dependency was released and you want it.
 
+Foundry fills the factories with random data and prints the seed at the end of every run. The same
+seed repeats a failed run with the same data:
+
+```bash
+FOUNDRY_FAKER_SEED=819793 testkit test --filter=Headline
+```
+
 ## What a package needs
 
 A bundle or project uses `open-dxp/test-foundation`. Its `composer.json` requires the foundation in

@@ -24,9 +24,15 @@ done
 testkit=$(cd -P "$(dirname "$script")" && pwd)
 
 in_container() {
+    local environment=''
+    # ddev exec does not pass the host's environment. A failed run prints its seed, and this repeats it.
+    if [ -n "${FOUNDRY_FAKER_SEED:-}" ]; then
+        environment=$(printf 'FOUNDRY_FAKER_SEED=%q ' "$FOUNDRY_FAKER_SEED")
+    fi
+
     cd "$testkit"
     # ddev exec hands its arguments to a shell as one string, so each one is quoted here.
-    ddev exec -d /var/www/html "php .ddev/testkit/testkit.php $(printf '%q ' "$@")"
+    ddev exec -d /var/www/html "${environment}php .ddev/testkit/testkit.php $(printf '%q ' "$@")"
 }
 
 # git decides and not rsync, because rsync reads .gitignore without its ! exceptions.

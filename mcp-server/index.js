@@ -52,6 +52,7 @@ const TOOLS = [
                 php,
                 database,
                 fresh: {type: 'boolean', description: 'Build the slot again from nothing, for example after a dependency was released.'},
+                seed: {type: 'integer', description: 'The Faker seed a failed run printed. It repeats that run with the same data.'},
             },
             required: ['path'],
         },
@@ -88,8 +89,12 @@ const TOOLS = [
     },
 ];
 
-function testkit(args) {
-    const result = spawnSync(TESTKIT, args, {encoding: 'utf8', timeout: ONE_RUN, env: {...process.env, NO_COLOR: '1'}});
+function testkit(args, environment = {}) {
+    const result = spawnSync(TESTKIT, args, {
+        encoding: 'utf8',
+        timeout: ONE_RUN,
+        env: {...process.env, ...environment, NO_COLOR: '1'},
+    });
     const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
 
     return {text: output || 'The testkit produced no output.', isError: result.status !== 0};
@@ -104,10 +109,10 @@ function slotOptions({php, database, fresh}) {
 }
 
 const handlers = {
-    run_tests: ({path, filter, ...rest}) => testkit([
+    run_tests: ({path, filter, seed, ...rest}) => testkit([
         'test', path, ...slotOptions(rest), '--', '--colors=never',
         ...(filter ? (filter.startsWith('tests/') ? [filter] : ['--filter', filter]) : []),
-    ]),
+    ], seed === undefined ? {} : {FOUNDRY_FAKER_SEED: String(seed)}),
     run_analysis: ({path, check, baseline, ...rest}) => testkit([
         'analyse', path, ...(check ? [check] : []), ...(baseline ? ['--baseline'] : []), ...slotOptions(rest),
     ]),
