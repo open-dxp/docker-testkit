@@ -18,9 +18,13 @@ spl_autoload_register(static function (string $class): void {
 const APPLICATIONS_DIRECTORY = '/var/www/html/app';
 
 /**
+ * A test installs the class definitions of its fixtures for good. The analysis runs in a slot of its own, so it sees
+ * only what the installation built, as in CI.
+ *
+ * @param 'test'|'analyse' $use
  * @param callable(SlotApplication): int $command
  */
-function runInSlot(Configuration $configuration, Slots $slots, string $key, Arguments $arguments, callable $command): int
+function runInSlot(Configuration $configuration, Slots $slots, string $key, string $use, Arguments $arguments, callable $command): int
 {
     $phpVersion = $arguments->options['php'] ?? $configuration->defaultPhpVersion;
     $databaseServer = $arguments->options['db'] ?? $configuration->defaultDatabaseServer;
@@ -28,7 +32,7 @@ function runInSlot(Configuration $configuration, Slots $slots, string $key, Argu
     $configuration->versionOfDatabaseServer($databaseServer);
 
     $target = Target::fromSource($key, APPLICATIONS_DIRECTORY . '/sources/' . $key, $arguments->options['tag'] ?? '');
-    [$slot, $tookOverSlot] = $slots->claim(sprintf('%s|php%s|%s', $key, $phpVersion, $databaseServer));
+    [$slot, $tookOverSlot] = $slots->claim(sprintf('%s|%s|php%s|%s', $key, $use, $phpVersion, $databaseServer));
 
     return $slots->runExclusively($slot, static function () use ($configuration, $target, $slot, $phpVersion, $databaseServer, $arguments, $tookOverSlot, $command): int {
         $application = new SlotApplication($configuration, $target, $slot, $phpVersion, $databaseServer);
@@ -42,7 +46,7 @@ function runTests(Configuration $configuration, Slots $slots, string $key, Argum
 {
     $pestArguments = $arguments->passedOn;
 
-    return runInSlot($configuration, $slots, $key, $arguments, static function (SlotApplication $application) use ($pestArguments): int {
+    return runInSlot($configuration, $slots, $key, 'test', $arguments, static function (SlotApplication $application) use ($pestArguments): int {
         @mkdir($application->applicationDirectory() . '/var/report', 0777, true);
 
         return ProcessRunner::run(
@@ -58,7 +62,7 @@ function runAnalysis(Configuration $configuration, Slots $slots, string $key, Ar
     $check = $arguments->positional[1] ?? null;
     $writeBaseline = $arguments->has('baseline');
 
-    return runInSlot($configuration, $slots, $key, $arguments, static function (SlotApplication $application) use ($check, $writeBaseline): int {
+    return runInSlot($configuration, $slots, $key, 'analyse', $arguments, static function (SlotApplication $application) use ($check, $writeBaseline): int {
         $startedAt = time();
 
         $exitCode = ProcessRunner::run(

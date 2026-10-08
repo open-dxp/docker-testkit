@@ -29,6 +29,7 @@ directory and needs none. Do not look for one, do not run composer, pest or phps
 Every tool takes the absolute path of the checkout to run. That is usually your working directory.
 
 The first run of a checkout with a php version and a database builds its slot and takes minutes.
+Tests and static checks have a slot each, so the first analysis builds one as well.
 Later runs take seconds, until its composer.json changes. Run the narrowest thing that answers the
 question: one file, one filter.
 

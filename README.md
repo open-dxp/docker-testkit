@@ -199,8 +199,12 @@ the list, the testkit deletes the file unless you edited it.
 ## Slots
 
 Each run gets a slot: a directory with its own application and its own database. A slot belongs to
-one checkout, one PHP version and one database server. The second run of the same combination
-reuses it and takes seconds.
+one checkout, one PHP version and one database server, and either to the tests or to the static
+checks. The second run of the same combination reuses it and takes seconds.
+
+The static checks have a slot of their own because a test installs the class definitions of its
+fixtures for good. In its own slot, the analysis sees only what the installation built, as it does
+in CI.
 
 A slot is built again when the `composer.json` of the checkout or of a linked package changes, or
 the lock file or class definitions of a project. Everything else is copied into the slot before
