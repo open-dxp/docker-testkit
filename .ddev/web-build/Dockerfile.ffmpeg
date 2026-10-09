@@ -1,0 +1,4 @@
+# OpenDXP converts videos and takes their poster images with ffmpeg.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
