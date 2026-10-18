@@ -7,8 +7,8 @@ A test suite needs an installed OpenDXP application, a database and a compiled c
 testkit builds that application in a slot of its own and runs Pest or the static checks there. Your
 checkout stays as it is. Nothing is installed into it and nothing is written back.
 
-The application is built with the same commands CI uses, so a run here and a run in CI come to the
-same result.
+The README of [open-dxp/test-foundation](https://github.com/open-dxp/test-foundation) describes how
+you set up a package for tests.
 
 ## Requirements
 
@@ -70,81 +70,24 @@ testkit test --exclude-group=browser
 
 A path counts as the target only when it is a checkout, with a `composer.json` or a `.git`.
 
-`analyse` runs `lint` always: the container, the YAML configuration and the Twig templates. It runs
-phpstan when the package has a `phpstan.neon`, deptrac when it has a `deptrac.yaml` and phparkitect
-when it has a `phparkitect.php`. Name one check to run only that one.
+`analyse` runs every check the package configures. Name one check to run only that one.
 
 `analyse --baseline` writes the PHPStan baseline beside the package's `phpstan.neon` into your
 checkout. It is the only command that writes into a checkout.
 
 `--fresh` builds the slot again from nothing. Use it when a dependency was released and you want it.
 
-Foundry fills the factories with random data and prints the seed at the end of every run. The same
-seed repeats a failed run with the same data:
+The testkit hands `FOUNDRY_FAKER_SEED` from your shell to the run:
 
 ```bash
 FOUNDRY_FAKER_SEED=819793 testkit test --filter=Headline
 ```
 
-## What a package needs
-
-A bundle or project uses `open-dxp/test-foundation`. Its `composer.json` requires the foundation in
-`require-dev` and maps a namespace onto `tests/`:
-
-```json
-{
-    "require-dev": {
-        "open-dxp/test-foundation": "^1.0"
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "OpenDxp\\Bundle\\ToolboxBundle\\Tests\\": "tests/"
-        }
-    }
-}
-```
-
-Its `phpunit.xml.dist` names the bootstrap and the test kernel:
-
-```xml
-<phpunit bootstrap="vendor/open-dxp/test-foundation/bootstrap.php">
-    <php>
-        <env name="KERNEL_CLASS" value="OpenDxp\Bundle\ToolboxBundle\Tests\Application\TestKernel"/>
-    </php>
-</phpunit>
-```
-
-Its `phpstan.neon` names the paths to analyse and reads the container of the test kernel:
-
-```neon
-parameters:
-    paths:
-        - src
-    symfony:
-        containerXmlPath: %currentWorkingDirectory%/var/cache/test/TestContainerDebug.xml
-```
-
-A bundle may name packages its tests use but the bundle does not require. They are installed for
-the tests:
-
-```json
-{
-    "extra": {
-        "opendxp-test": {
-            "optional": ["open-dxp/content-crafter-bundle"]
-        }
-    }
-}
-```
+## Variables of a project
 
 A project that runs on DDEV keeps its local variables under `web_environment` in
 `.ddev/config.yaml`. The testkit hands them to every command in the slot. A project without DDEV
 puts the variables its tests need into a versioned `.env.test`, which Symfony loads during tests.
-
-`analyse` lints the templates of a project in the environment it is deployed to. That is `prod` or
-`production`, whichever the project configures under `config/packages/`, and `prod` otherwise.
-
-The README of `open-dxp/test-foundation` describes how to write the tests.
 
 ## Configuration
 
@@ -181,12 +124,9 @@ as the major version of its newest tag followed by `.99.99`, for example `1.99.9
 
 ### Services
 
-The testkit offers the services CI offers, with the same images and variable names:
-
-| Service      | Variable                   |
-|--------------|----------------------------|
-| `redis`      | `OPENDXP_TEST_REDIS_DSN`   |
-| `opensearch` | `OPENDXP_OPEN_SEARCH_HOST` |
+The testkit offers `redis` and `opensearch`, with the same images as CI. Each service sets its
+variable, as [External services](https://github.com/open-dxp/test-foundation#external-services)
+lists:
 
 ```yaml
 services: [redis, opensearch]
@@ -213,8 +153,8 @@ every run.
 When every slot is taken, the slot that was idle longest is built again for the new run. Two runs of
 the same combination wait for each other.
 
-Every test runs in a transaction that is rolled back. A test that writes outside the transaction,
-for example by creating a table, leaves that write in the slot for the next run.
+A test that writes outside its transaction, for example by creating a table, leaves that write in
+the slot for the next run.
 
 ```bash
 testkit status
