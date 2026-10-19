@@ -7,6 +7,7 @@ services:
             com.ddev.approot: ${DDEV_APPROOT}
         environment:
             discovery.type: single-node
+            cluster.routing.allocation.disk.threshold_enabled: "false"
             DISABLE_SECURITY_PLUGIN: "true"
             DISABLE_INSTALL_DEMO_CONFIG: "true"
             OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
