@@ -25,9 +25,7 @@ final readonly class SlotApplication
 
     public function applicationDirectory(): string
     {
-        return $this->target->isProject
-            ? $this->slot->path . '/' . $this->target->applicationPath
-            : $this->slot->path;
+        return $this->target->applicationDirectoryIn($this->slot->path);
     }
 
     public function packageDirectory(): string
@@ -186,7 +184,7 @@ final readonly class SlotApplication
      */
     private function copyProject(): void
     {
-        $application = '/' . $this->target->applicationPath;
+        $application = $this->target->applicationPath === '' ? '' : '/' . $this->target->applicationPath;
 
         ProcessRunner::mustRun('Copying the project', [
             'rsync', '-a', '--delete',
@@ -225,14 +223,14 @@ final readonly class SlotApplication
     }
 
     /**
-     * Doctrine accepts a server version only with its patch number, and MariaDB only with its prefix.
+     * Doctrine needs the patch number of a server version, and a MariaDB version as the server reports it.
      */
     private function databaseServerVersion(): string
     {
         $version = $this->configuration->versionOfDatabaseServer($this->databaseServer);
         $version = substr_count($version, '.') === 1 ? $version . '.0' : $version;
 
-        return $this->databaseServer === 'mariadb' ? 'mariadb-' . $version : $version;
+        return $this->databaseServer === 'mariadb' ? $version . '-MariaDB' : $version;
     }
 
     private function computeFingerprint(): string
