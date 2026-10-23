@@ -223,14 +223,14 @@ final readonly class SlotApplication
     }
 
     /**
-     * Doctrine accepts a server version only with its patch number, and MariaDB only with its prefix.
+     * Doctrine needs the patch number of a server version, and a MariaDB version as the server reports it.
      */
     private function databaseServerVersion(): string
     {
         $version = $this->configuration->versionOfDatabaseServer($this->databaseServer);
         $version = substr_count($version, '.') === 1 ? $version . '.0' : $version;
 
-        return $this->databaseServer === 'mariadb' ? 'mariadb-' . $version : $version;
+        return $this->databaseServer === 'mariadb' ? $version . '-MariaDB' : $version;
     }
 
     private function computeFingerprint(): string
