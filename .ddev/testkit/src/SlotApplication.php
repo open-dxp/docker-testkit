@@ -25,9 +25,7 @@ final readonly class SlotApplication
 
     public function applicationDirectory(): string
     {
-        return $this->target->isProject
-            ? $this->slot->path . '/' . $this->target->applicationPath
-            : $this->slot->path;
+        return $this->target->applicationDirectoryIn($this->slot->path);
     }
 
     public function packageDirectory(): string
@@ -186,7 +184,7 @@ final readonly class SlotApplication
      */
     private function copyProject(): void
     {
-        $application = '/' . $this->target->applicationPath;
+        $application = $this->target->applicationPath === '' ? '' : '/' . $this->target->applicationPath;
 
         ProcessRunner::mustRun('Copying the project', [
             'rsync', '-a', '--delete',

@@ -40,14 +40,21 @@ final readonly class Target
             }
         }
 
+        if (is_file($rootManifest)) {
+            return new self($key, $sourceDirectory, self::readJson($rootManifest)['name'], true, '', $newestTag);
+        }
+
         throw new RuntimeException(sprintf('%s is neither a bundle nor a project.', $key));
+    }
+
+    public function applicationDirectoryIn(string $directory): string
+    {
+        return $this->applicationPath === '' ? $directory : $directory . '/' . $this->applicationPath;
     }
 
     public function manifestPath(): string
     {
-        return $this->isProject
-            ? $this->sourceDirectory . '/' . $this->applicationPath . '/composer.json'
-            : $this->sourceDirectory . '/composer.json';
+        return $this->applicationDirectoryIn($this->sourceDirectory) . '/composer.json';
     }
 
     public function foundationConstraint(): string
@@ -70,7 +77,7 @@ final readonly class Target
             return [$this->manifestPath()];
         }
 
-        $applicationDirectory = $this->sourceDirectory . '/' . $this->applicationPath;
+        $applicationDirectory = $this->applicationDirectoryIn($this->sourceDirectory);
 
         return [
             $this->manifestPath(),
