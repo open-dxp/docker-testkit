@@ -103,7 +103,8 @@ which is not versioned. Maps are merged key by key, lists are replaced. A change
 | `registry`          | A composer repository besides packagist, for closed-source packages.              |
 | `composer_symlinks` | Packages taken from a checkout on your machine instead of from a registry.        |
 | `services`          | Services a suite needs, from the catalogue.                                       |
-| `memory`            | The memory limit of the testkit container. All slots share it. The default is 8g. |
+| `memory`            | The memory limit of the testkit container. All slots share it. The default is 4g. |
+| `cpus`              | The cores the testkit container may use. All slots share them. The default is 4.  |
 
 ### Working on a dependency
 

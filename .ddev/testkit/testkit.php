@@ -135,7 +135,8 @@ function printStatus(Configuration $configuration, Slots $slots): int
     printf("php        %s (default %s)\n", implode(', ', $configuration->phpVersions), $configuration->defaultPhpVersion);
     printf("databases  %s (default %s)\n", implode(', ', array_keys($configuration->databaseServers)), $configuration->defaultDatabaseServer);
     printf("services   %s\n", $configuration->services === [] ? 'none' : implode(', ', $configuration->services));
-    printf("memory     %s\n\n", $configuration->memory);
+    printf("memory     %s\n", $configuration->memory);
+    printf("cpus       %s\n\n", $configuration->cpus);
 
     $occupiedSlots = $slots->occupiedSlots();
 

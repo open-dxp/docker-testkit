@@ -24,6 +24,7 @@ final readonly class Configuration
         public array $composerSymlinks,
         public array $services,
         public string $memory,
+        public float $cpus,
     ) {
     }
 
@@ -45,6 +46,7 @@ final readonly class Configuration
             $merged['composer_symlinks'] ?? [],
             $merged['services'] ?? [],
             (string) $merged['memory'],
+            (float) $merged['cpus'],
         );
 
         $configuration->assertPhpVersion($configuration->defaultPhpVersion);
