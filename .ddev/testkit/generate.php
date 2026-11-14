@@ -13,7 +13,7 @@ require __DIR__ . '/src/ComposerSymlink.php';
 
 const LABELS = [
     'com.ddev.site-name' => '${DDEV_SITENAME}',
-    'com.ddev.approot' => '${DDEV_APPROOT}',
+    'com.ddev.approot'   => '${DDEV_APPROOT}',
 ];
 
 /**
@@ -27,7 +27,7 @@ function serviceComposeFiles(Configuration $configuration): array
         $template = __DIR__ . '/services/' . $service . '.yaml';
 
         if (!is_file($template)) {
-            $offeredServices = array_map(static fn (string $path): string => basename($path, '.yaml'), glob(__DIR__ . '/services/*.yaml') ?: []);
+            $offeredServices = array_map(static fn(string $path): string => basename($path, '.yaml'), glob(__DIR__ . '/services/*.yaml') ?: []);
 
             throw new RuntimeException(sprintf('There is no service called %s. The testkit offers %s.', $service, implode(', ', $offeredServices)));
         }
@@ -48,10 +48,10 @@ function databaseComposeFiles(Configuration $configuration): array
     foreach ($configuration->databaseServers as $server => $version) {
         $composeFiles['docker-compose.' . $server . '.yaml'] = composeFile([
             $server => [
-                'image' => $server . ':' . $version,
+                'image'          => $server . ':' . $version,
                 'container_name' => 'ddev-${DDEV_SITENAME}-' . $server,
-                'labels' => LABELS,
-                'environment' => ['MYSQL_ROOT_PASSWORD' => 'root'],
+                'labels'         => LABELS,
+                'environment'    => ['MYSQL_ROOT_PASSWORD' => 'root'],
             ],
         ]);
     }
@@ -62,15 +62,18 @@ function databaseComposeFiles(Configuration $configuration): array
 function webComposeFile(Configuration $configuration): string
 {
     $web = [
-        'mem_limit' => $configuration->memory,
+        'mem_limit'     => $configuration->memory,
         'memswap_limit' => $configuration->memory,
+        'cpus'          => $configuration->cpus,
+        // When the machine runs out of memory, the kernel stops a test before any other process.
+        'oom_score_adj' => 1000,
     ];
 
     foreach ($configuration->composerSymlinks as $package => $hostPath) {
         $web['volumes'][] = [
-            'type' => 'bind',
-            'source' => $hostPath,
-            'target' => (new ComposerSymlink($package, $hostPath))->mountPoint(),
+            'type'      => 'bind',
+            'source'    => $hostPath,
+            'target'    => (new ComposerSymlink($package, $hostPath))->mountPoint(),
             'read_only' => true,
         ];
     }

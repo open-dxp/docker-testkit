@@ -25,4 +25,7 @@ composer_symlinks: {}
 services: []
 
 # The memory limit of the web container. All slots share it.
-memory: 8g
+memory: 4g
+
+# The cores the web container may use. All slots share them. PHPStan starts one worker per core.
+cpus: 4
