@@ -32,6 +32,28 @@ final class ProcessRunner
     }
 
     /**
+     * Returns what the command prints. A failure throws with the output.
+     *
+     * @param list<string> $command
+     */
+    public static function read(string $description, array $command, string $workingDirectory): string
+    {
+        $log = tmpfile();
+        $exitCode = self::execute($command, $workingDirectory, [], $log);
+        rewind($log);
+        $output = (string) stream_get_contents($log);
+        fclose($log);
+
+        if ($exitCode !== 0) {
+            echo $output;
+
+            throw new RuntimeException(sprintf('%s failed.', $description));
+        }
+
+        return $output;
+    }
+
+    /**
      * @param list<string>          $command
      * @param array<string, string> $environment
      */

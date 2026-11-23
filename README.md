@@ -103,6 +103,7 @@ which is not versioned. Maps are merged key by key, lists are replaced. A change
 | `registry`          | A composer repository besides packagist, for closed-source packages.              |
 | `composer_symlinks` | Packages taken from a checkout on your machine instead of from a registry.        |
 | `services`          | Services a suite needs, from the catalogue.                                       |
+| `environment`       | Values for the variables the tests of a package declare, such as an API key.      |
 | `memory`            | The memory limit of the testkit container. All slots share it. The default is 4g. |
 | `cpus`              | The cores the testkit container may use. All slots share them. The default is 4.  |
 
@@ -137,6 +138,31 @@ On start, each listed service gets a file `.ddev/docker-compose.<service>.yaml`.
 different setting, edit that file. The testkit then leaves it alone. When you remove the service from
 the list, the testkit deletes the file unless you edited it.
 
+### Environment variables
+
+A test against an outside service, such as a payment sandbox or a translation API, needs a key. The
+package names the variables its tests read in its `composer.json`:
+
+```json
+"extra": {
+    "opendxp-test": {
+        "environment": ["DEEPL_API_KEY"]
+    }
+}
+```
+
+You keep the values under `environment` in `.ddev/testkit.yaml`:
+
+```yaml
+environment:
+    DEEPL_API_KEY: your-key
+```
+
+The testkit hands a value only to the tests of a package that names the variable. The installation
+and the static checks never receive it. A variable without a value stays unset, and a test that
+needs it skips itself. The testkit never prints a value. A change takes effect on the next run and
+needs no `ddev restart`.
+
 ## Slots
 
 Each run gets a slot: a directory with its own application and its own database. A slot belongs to
@@ -148,14 +174,16 @@ fixtures for good. In its own slot, the analysis sees only what the installation
 in CI.
 
 A slot is built again when the `composer.json` of the checkout or of a linked package changes, or
-the lock file or class definitions of a project. Everything else is copied into the slot before
-every run.
+the lock file or class definitions of a project. It is also built again when its saved database is
+missing. Everything else is copied into the slot before every run.
 
 When every slot is taken, the slot that was idle longest is built again for the new run. Two runs of
 the same combination wait for each other.
 
-A test that writes outside its transaction, for example by creating a table, leaves that write in
-the slot for the next run.
+After the installation, the testkit saves the database of the slot. Before every test run, it
+restores this database when its content differs from the installation. Every run therefore starts
+from a fresh installation, as in CI. A write outside the transaction of a test lasts until the run
+ends. A run that rolled every test back leaves nothing to restore.
 
 ```bash
 testkit status

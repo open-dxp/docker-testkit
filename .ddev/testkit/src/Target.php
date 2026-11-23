@@ -109,6 +109,20 @@ final readonly class Target
     }
 
     /**
+     * @return list<string>
+     */
+    public function readEnvironmentNames(): array
+    {
+        $names = self::readJson($this->manifestPath())['extra']['opendxp-test']['environment'] ?? [];
+
+        if (!is_array($names) || !array_is_list($names)) {
+            throw new RuntimeException(sprintf('extra.opendxp-test.environment of %s has to be a list of variable names.', $this->package));
+        }
+
+        return array_map('strval', $names);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private static function readJson(string $file): array

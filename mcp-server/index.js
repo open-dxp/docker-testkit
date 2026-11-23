@@ -33,8 +33,8 @@ Tests and static checks have a slot each, so the first analysis builds one as we
 Later runs take seconds, until its composer.json changes. Run the narrowest thing that answers the
 question: one file, one filter.
 
-Every test runs in a transaction that is rolled back. A test that writes outside the transaction
-leaves that write in the slot for the next run.
+Every test runs in a transaction that is rolled back. Every run starts from a freshly installed
+database, so a write outside the transaction lasts only until the run ends.
 `.trim();
 
 const location = {type: 'string', description: 'The absolute path of the bundle, core or project checkout.'};
