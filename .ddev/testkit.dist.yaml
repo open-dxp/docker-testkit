@@ -24,6 +24,11 @@ composer_symlinks: {}
 # Services from the catalogue in .ddev/testkit/services, for example [redis, opensearch].
 services: []
 
+# Values for the variables a package declares under extra.opendxp-test.environment, as name: value. Put them into
+# testkit.yaml only. Only the tests of a package that declares a variable receive it. A change takes effect on the
+# next run.
+environment: {}
+
 # The memory limit of the web container. All slots share it.
 memory: 4g
 

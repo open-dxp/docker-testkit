@@ -13,6 +13,8 @@ use SplFileInfo;
 final readonly class SlotApplication
 {
     private const string COMPOSER = '/usr/local/bin/composer';
+    private const string INSTALLATION_DUMP = '/.installation.sql';
+    private const string INSTALLATION_CHECKSUM = '/.installation.checksum';
 
     public function __construct(
         private Configuration $configuration,
@@ -42,13 +44,22 @@ final readonly class SlotApplication
      */
     public function runEnvironment(): array
     {
-        return [
-            ...$this->target->readWebEnvironment(),
-            'APP_ENV' => 'test',
-            'DATABASE_URL' => sprintf('mysql://root:root@%s:3306/%s', $this->databaseServer, $this->slot->databaseName),
-            'DATABASE_SERVER_VERSION' => $this->databaseServerVersion(),
-            'TMPDIR' => $this->slot->path . '/.tmp',
-        ];
+        return [...$this->target->readWebEnvironment(), ...$this->slotEnvironment()];
+    }
+
+    /**
+     * Adds the values of testkit.yaml for the variables the target declares. A variable without a value stays unset.
+     *
+     * @return array<string, string>
+     */
+    public function testEnvironment(): array
+    {
+        $declaredValues = array_intersect_key(
+            $this->configuration->environment,
+            array_flip($this->target->readEnvironmentNames()),
+        );
+
+        return [...$this->target->readWebEnvironment(), ...$declaredValues, ...$this->slotEnvironment()];
     }
 
     /**
@@ -75,12 +86,16 @@ final readonly class SlotApplication
         }
     }
 
+    /**
+     * A slot without a dump holds a database of unknown state, so it is built again.
+     */
     public function buildOrUpdate(bool $fresh, bool $tookOverSlot): void
     {
         $fingerprint = $this->computeFingerprint();
         $fingerprintFile = $this->slot->path . '/.fingerprint';
+        $isOutdated = !is_file($fingerprintFile) || file_get_contents($fingerprintFile) !== $fingerprint;
 
-        if ($fresh || $tookOverSlot || !is_file($fingerprintFile) || file_get_contents($fingerprintFile) !== $fingerprint) {
+        if ($fresh || $tookOverSlot || $isOutdated || !is_file($this->slot->path . self::INSTALLATION_DUMP)) {
             $this->build();
             file_put_contents($fingerprintFile, $fingerprint);
 
@@ -101,6 +116,37 @@ final readonly class SlotApplication
         $this->target->isProject ? $this->buildProject() : $this->buildBundle();
 
         ProcessRunner::mustRun('Installing OpenDXP', $this->phpCommand('vendor/bin/opendxp-test', 'install'), $this->applicationDirectory(), $this->runEnvironment());
+
+        ProcessRunner::mustRun('Saving the installed database', [
+            'mysqldump', '--no-defaults', '--host=' . $this->databaseServer, '--user=root', '--password=root',
+            '--routines', '--result-file=' . $this->slot->path . self::INSTALLATION_DUMP, $this->slot->databaseName,
+        ], '/');
+    }
+
+    /**
+     * Every test run starts from the database as the installation left it, as in CI.
+     */
+    public function restoreInstalledDatabase(): void
+    {
+        // A run rolls its tests back, so the database is mostly as installed, and checking it costs far less than a restore.
+        if ($this->readChecksum() === @file_get_contents($this->slot->path . self::INSTALLATION_CHECKSUM)) {
+            return;
+        }
+
+        // The client knows USE and SOURCE only at the start of a line. Without the abort, a failed SOURCE exits with 0.
+        $statements = sprintf(
+            "DROP DATABASE IF EXISTS %1\$s;\n%2\$s;\nUSE %1\$s;\nSOURCE %3\$s",
+            $this->slot->databaseName,
+            $this->createDatabaseStatement(),
+            $this->slot->path . self::INSTALLATION_DUMP,
+        );
+
+        ProcessRunner::mustRun(
+            'Restoring the installed database',
+            [...self::mysqlCommand($this->databaseServer, $statements), '--abort-source-on-error'],
+            '/',
+        );
+        file_put_contents($this->slot->path . self::INSTALLATION_CHECKSUM, $this->readChecksum());
     }
 
     private function buildBundle(): void
@@ -193,6 +239,8 @@ final readonly class SlotApplication
             '--filter=P ' . $application . '/public/bundles/***',
             '--filter=P ' . $application . '/.env',
             '--filter=P /.fingerprint',
+            '--filter=P ' . self::INSTALLATION_DUMP,
+            '--filter=P ' . self::INSTALLATION_CHECKSUM,
             '--filter=P /.tmp/***',
             $this->target->sourceDirectory . '/', $this->slot->path . '/',
         ], '/');
@@ -209,9 +257,37 @@ final readonly class SlotApplication
 
         ProcessRunner::mustRun(
             'Creating the database',
-            self::mysqlCommand($this->databaseServer, 'CREATE DATABASE ' . $this->slot->databaseName . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'),
+            self::mysqlCommand($this->databaseServer, $this->createDatabaseStatement()),
             '/',
         );
+    }
+
+    /**
+     * Sums the content of every table, so a run that left the database as installed is recognised.
+     */
+    private function readChecksum(): string
+    {
+        $tables = ProcessRunner::read('Listing the tables', [
+            ...self::mysqlCommand($this->databaseServer, 'SHOW TABLES'), '--skip-column-names', $this->slot->databaseName,
+        ], '/');
+        $names = array_filter(explode("\n", trim($tables)));
+
+        if ($names === []) {
+            return '';
+        }
+
+        $checksums = ProcessRunner::read('Checking the database', [
+            ...self::mysqlCommand($this->databaseServer, 'CHECKSUM TABLE `' . implode('`, `', $names) . '`'),
+            '--skip-column-names',
+            $this->slot->databaseName,
+        ], '/');
+
+        return hash('xxh128', $checksums);
+    }
+
+    private function createDatabaseStatement(): string
+    {
+        return 'CREATE DATABASE ' . $this->slot->databaseName . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci';
     }
 
     /**
@@ -220,6 +296,19 @@ final readonly class SlotApplication
     public static function mysqlCommand(string $server, string $statement): array
     {
         return ['mysql', '--no-defaults', '--host=' . $server, '--user=root', '--password=root', '--execute=' . $statement];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function slotEnvironment(): array
+    {
+        return [
+            'APP_ENV' => 'test',
+            'DATABASE_URL' => sprintf('mysql://root:root@%s:3306/%s', $this->databaseServer, $this->slot->databaseName),
+            'DATABASE_SERVER_VERSION' => $this->databaseServerVersion(),
+            'TMPDIR' => $this->slot->path . '/.tmp',
+        ];
     }
 
     /**

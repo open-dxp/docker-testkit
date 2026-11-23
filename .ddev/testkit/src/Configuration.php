@@ -13,6 +13,7 @@ final readonly class Configuration
      * @param array<string, string> $databaseServers  server name => version
      * @param array<string, string> $composerSymlinks package name => host path
      * @param list<string>          $services
+     * @param array<string, string> $environment      variable name => value
      */
     private function __construct(
         public int $slots,
@@ -25,6 +26,7 @@ final readonly class Configuration
         public array $services,
         public string $memory,
         public float $cpus,
+        public array $environment,
     ) {
     }
 
@@ -47,6 +49,7 @@ final readonly class Configuration
             $merged['services'] ?? [],
             (string) $merged['memory'],
             (float) $merged['cpus'],
+            array_map('strval', array_filter($merged['environment'] ?? [], static fn (mixed $value): bool => $value !== null)),
         );
 
         $configuration->assertPhpVersion($configuration->defaultPhpVersion);

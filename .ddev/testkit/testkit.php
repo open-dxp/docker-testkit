@@ -48,11 +48,12 @@ function runTests(Configuration $configuration, Slots $slots, string $key, Argum
 
     return runInSlot($configuration, $slots, $key, 'test', $arguments, static function (SlotApplication $application) use ($pestArguments): int {
         @mkdir($application->applicationDirectory() . '/var/report', 0777, true);
+        $application->restoreInstalledDatabase();
 
         return ProcessRunner::run(
             $application->phpCommand('vendor/bin/pest', '--log-junit', 'var/report/pest.junit.xml', ...$pestArguments),
             $application->applicationDirectory(),
-            $application->runEnvironment(),
+            $application->testEnvironment(),
         );
     });
 }
