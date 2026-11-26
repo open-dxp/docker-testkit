@@ -16,15 +16,14 @@ final readonly class SlotApplication
     private const string INSTALLATION_DUMP = '/.installation.sql';
     private const string INSTALLATION_CHECKSUM = '/.installation.checksum';
 
-    // Each slot answers on names of its own below the wildcard that .ddev/config.yaml registers: one for the
-    // application, one ending in "-api" for an application that serves its API on a host of its own, and one with a
-    // port of its own for a frontend.
+    // Hosts per slot below the *.testkit wildcard in .ddev/config.yaml: the app, an "-api" alias for apps that serve
+    // their API on a separate host, and a frontend with its own port.
     private const string HOST = 'slot-%d.testkit.ddev.site';
     private const string API_HOST = 'slot-%d-api.testkit.ddev.site';
     private const string WEB_HOST = 'slot-%d-web.testkit.ddev.site';
     private const int WEB_PORT = 3000;
     private const string SITE = '/etc/apache2/sites-enabled/testkit-slot-%d.conf';
-    // Beside the slot, because a project is copied into the slot with --delete.
+    // Outside the slot, since the project sync runs rsync --delete on it.
     private const string FRONTEND = '/var/www/html/app/.frontends/slot-%d';
     private const string BROWSERS = '/var/www/html/app/.playwright';
     private const string WEB_PHP_SOCKET = '/run/php/php-fpm.sock';
@@ -85,47 +84,60 @@ final readonly class SlotApplication
     }
 
     /**
-     * Answers requests for the slot with its test kernel, its database, its environment and its PHP version, until the
-     * container restarts. The host of the frontend is passed on to a frontend the slot runs.
+     * Serves the slot with test kernel, slot database, environment and PHP version until the container restarts.
      *
-     * @return string the address of the slot
+     * @return string slot URL
      */
     public function serve(): string
     {
         $host = sprintf(self::HOST, $this->slot->number);
+        $apiHost = sprintf(self::API_HOST, $this->slot->number);
+        $webHost = sprintf(self::WEB_HOST, $this->slot->number);
         $root = $this->applicationDirectory() . '/public';
-        $served = $this->servedEnvironment();
-        $environment = implode('', array_map(
-            static fn (string $name, string $value): string => sprintf("    SetEnv %s \"%s\"\n", $name, addcslashes($value, '"\\')),
-            array_keys($served),
-            $served,
+        $socket = $this->startPhp();
+        $port = $this->webPort();
+        $environment = implode("\n", array_map(
+            static fn (string $name, string $value): string => sprintf('SetEnv %s "%s"', $name, addcslashes($value, '"\\')),
+            array_keys($this->servedEnvironment()),
+            $this->servedEnvironment(),
         ));
 
-        $backend = self::buildSite(
-            sprintf("    ServerName %s\n    ServerAlias %s\n    DocumentRoot %s\n", $host, sprintf(self::API_HOST, $this->slot->number), $root)
-            . sprintf("    <Directory \"%s/\">\n        AllowOverride All\n        Require all granted\n        FallbackResource /index.php\n    </Directory>\n", $root)
-            // The web server hands PHP to its own version inside an <If>, which Apache applies last. An <If> of the
-            // host comes after it.
-            . sprintf("    <FilesMatch \"\\.php$\">\n        <If \"-f %%{REQUEST_FILENAME}\">\n            SetHandler \"proxy:unix:%s|fcgi://localhost\"\n        </If>\n    </FilesMatch>\n", $this->startPhp())
-            . "    SetEnvIf X-Forwarded-Proto \"https\" HTTPS=on\n" . $environment,
-        );
-        $frontend = self::buildSite(sprintf(
-            "    ServerName %s\n    ProxyPreserveHost On\n    ProxyPass / http://localhost:%d/\n    ProxyPassReverse / http://localhost:%d/\n",
-            sprintf(self::WEB_HOST, $this->slot->number),
-            $this->webPort(),
-            $this->webPort(),
-        ));
+        // ddev's PHP handler sits in an <If>, which Apache merges last. A vhost <If> merges after it and wins.
+        $backend = <<<APACHE
+            ServerName {$host}
+            ServerAlias {$apiHost}
+            DocumentRoot {$root}
+            <Directory "{$root}/">
+                AllowOverride All
+                Require all granted
+                FallbackResource /index.php
+            </Directory>
+            <FilesMatch "\.php$">
+                <If "-f %{REQUEST_FILENAME}">
+                    SetHandler "proxy:unix:{$socket}|fcgi://localhost"
+                </If>
+            </FilesMatch>
+            SetEnvIf X-Forwarded-Proto "https" HTTPS=on
+            {$environment}
+            APACHE;
 
-        file_put_contents(sprintf(self::SITE, $this->slot->number), $backend . $frontend);
+        $frontend = <<<APACHE
+            ServerName {$webHost}
+            ProxyPreserveHost On
+            ProxyPass / http://localhost:{$port}/
+            ProxyPassReverse / http://localhost:{$port}/
+            APACHE;
+
+        file_put_contents(sprintf(self::SITE, $this->slot->number), self::buildSite($backend) . self::buildSite($frontend));
         ProcessRunner::mustRun('Reloading the web server', ['sudo', 'sh', '-c', 'a2enmod -q proxy_http && apache2ctl graceful'], '/');
 
         return 'https://' . $host;
     }
 
     /**
-     * Copies the frontend next to the slot and installs its packages and its browser, each only when it changed.
+     * Copies the frontend next to the slot and installs packages and browser when they changed.
      *
-     * @return string the directory the frontend runs in
+     * @return string frontend directory
      */
     public function prepareFrontend(string $sourceDirectory): string
     {
@@ -148,7 +160,7 @@ final readonly class SlotApplication
     }
 
     /**
-     * What a frontend needs to find the slot: the API, its own host and port, and the browser the testkit keeps.
+     * Frontend environment: API URL, frontend host and port, shared browser cache.
      *
      * @return array<string, string>
      */
@@ -160,17 +172,16 @@ final readonly class SlotApplication
             'E2E_PORT' => (string) $this->webPort(),
             'NEXT_DIST_DIR' => '.next-e2e',
             'MAILPIT_API' => 'http://localhost:8025/api/v1',
-            // The router of ddev signs with the mkcert root, which node does not know on its own.
+            // ddev certificates are signed by the mkcert root, which Node does not trust by default.
             'NODE_EXTRA_CA_CERTS' => '/etc/ssl/certs/ca-certificates.crt',
             'PLAYWRIGHT_BROWSERS_PATH' => self::BROWSERS,
         ];
     }
 
     /**
-     * The web server runs the PHP of the container. Another version gets a process of its own, shared by every slot
-     * of that version.
+     * Slots on the web server's PHP version use its FPM. Other versions get one FPM per version, shared by their slots.
      *
-     * @return string the socket that runs the PHP of the slot
+     * @return string FPM socket
      */
     private function startPhp(): string
     {
@@ -195,7 +206,7 @@ final readonly class SlotApplication
     }
 
     /**
-     * Loads the story groups the tests load before they run, as phpunit.xml names them for LoadFixtures.
+     * Loads the story groups phpunit.xml configures for LoadFixtures.
      */
     public function loadStories(): void
     {
@@ -216,8 +227,7 @@ final readonly class SlotApplication
     }
 
     /**
-     * A served slot runs the kernel of the tests in this application, as the console of the tests does. The packages
-     * lie behind symlinks, so the root is named rather than found.
+     * Test kernel and project root, as the test console gets them. Packages are symlinked, so the root can't be derived.
      *
      * @return array<string, string>
      */
@@ -227,8 +237,8 @@ final readonly class SlotApplication
             ...$this->testEnvironment(),
             'OPENDXP_PROJECT_ROOT' => $this->applicationDirectory(),
             'OPENDXP_KERNEL_CLASS' => $this->readTestConfiguration('/phpunit/php/*[@name="KERNEL_CLASS"]/@value')
-                ?? throw new \RuntimeException('The phpunit.xml of the application names no KERNEL_CLASS.'),
-            // Mails of a served slot land in the Mailpit of the container, where a frontend suite can read them.
+                ?? throw new \RuntimeException('phpunit.xml defines no KERNEL_CLASS.'),
+            // Mails go to the container's Mailpit, where frontend specs read them.
             'MAILER_DSN' => 'smtp://localhost:1025',
         ];
     }
@@ -252,15 +262,25 @@ final readonly class SlotApplication
         return self::WEB_PORT + $this->slot->number;
     }
 
-    private static function buildSite(string $body): string
+    /**
+     * HTTP and HTTPS vhosts, the latter with the ddev certificate.
+     */
+    private static function buildSite(string $directives): string
     {
-        $site = '';
+        return <<<APACHE
+            <VirtualHost *:80>
+            {$directives}
+            ErrorLog /dev/stdout
+            </VirtualHost>
+            <VirtualHost *:443>
+            SSLEngine on
+            SSLCertificateFile /etc/ssl/certs/master.crt
+            SSLCertificateKeyFile /etc/ssl/certs/master.key
+            {$directives}
+            ErrorLog /dev/stdout
+            </VirtualHost>
 
-        foreach (['80' => '', '443' => "    SSLEngine on\n    SSLCertificateFile /etc/ssl/certs/master.crt\n    SSLCertificateKeyFile /etc/ssl/certs/master.key\n"] as $port => $tls) {
-            $site .= "<VirtualHost *:{$port}>\n{$tls}{$body}    ErrorLog /dev/stdout\n</VirtualHost>\n";
-        }
-
-        return $site;
+            APACHE;
     }
 
     /**
@@ -501,7 +521,7 @@ final readonly class SlotApplication
             'DATABASE_URL' => sprintf('mysql://root:root@%s:3306/%s', $this->databaseServer, $this->slot->databaseName),
             'DATABASE_SERVER_VERSION' => $this->databaseServerVersion(),
             'TMPDIR' => $this->slot->path . '/.tmp',
-            // The host a frontend of the slot answers on, for a story that sets up a site for it.
+            // Frontend host, for stories that create a site.
             'E2E_HOST' => sprintf(self::WEB_HOST, $this->slot->number),
         ];
     }
