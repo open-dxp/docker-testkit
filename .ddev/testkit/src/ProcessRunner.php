@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Testkit;
 
+use Closure;
 use RuntimeException;
 
 final class ProcessRunner
@@ -67,7 +68,42 @@ final class ProcessRunner
      * @param array<string, string> $environment
      * @param resource              $output
      */
+    /**
+     * Runs the command in the background and writes its output to the log.
+     *
+     * @param list<string>          $command
+     * @param array<string, string> $environment
+     *
+     * @return Closure(): void stops the command
+     */
+    public static function start(array $command, string $workingDirectory, array $environment, string $log): Closure
+    {
+        $process = self::open($command, $workingDirectory, $environment, ['file', $log, 'a']);
+
+        return static function () use ($process): void {
+            proc_terminate($process);
+            proc_close($process);
+        };
+    }
+
+    /**
+     * @param list<string>          $command
+     * @param array<string, string> $environment
+     * @param resource              $output
+     */
     private static function execute(array $command, string $workingDirectory, array $environment, mixed $output): int
+    {
+        return proc_close(self::open($command, $workingDirectory, $environment, $output));
+    }
+
+    /**
+     * @param list<string>          $command
+     * @param array<string, string> $environment
+     * @param resource|list<string> $output
+     *
+     * @return resource
+     */
+    private static function open(array $command, string $workingDirectory, array $environment, mixed $output): mixed
     {
         // proc_open drops a variable with an empty value from a map, but not from a list of pairs.
         $variables = [];
@@ -82,6 +118,6 @@ final class ProcessRunner
             throw new RuntimeException(sprintf('%s could not be started.', $command[0]));
         }
 
-        return proc_close($process);
+        return $process;
     }
 }

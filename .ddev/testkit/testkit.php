@@ -125,6 +125,38 @@ function runEndToEnd(Configuration $configuration, Slots $slots, string $key, Ar
     });
 }
 
+/**
+ * Records <directory>/scenes.js of a checkout in Chromium, against its served slot with workers running. The shell
+ * copies the recording into the checkout.
+ */
+function recordScenes(Configuration $configuration, Slots $slots, string $key, Arguments $arguments): int
+{
+    $directory = trim($arguments->positional[1] ?? throw new RuntimeException('Name the directory of the scenes.'), '/');
+    $scenes = APPLICATIONS_DIRECTORY . '/sources/' . $key . '/' . $directory . '/scenes.js';
+    $output = APPLICATIONS_DIRECTORY . '/.recordings/' . $key . '/' . $directory;
+
+    if (!is_file($scenes)) {
+        throw new RuntimeException(sprintf('%s/scenes.js does not exist.', $directory));
+    }
+
+    $rehearse = $arguments->has('rehearse');
+
+    return runInSlot($configuration, $slots, $key, 'test', $arguments, static function (SlotApplication $application) use ($scenes, $output, $rehearse): int {
+        $url = serveApplication($application);
+        $stopWorkers = $application->startWorkers();
+
+        try {
+            return ProcessRunner::run(
+                ['node', __DIR__ . '/record/record.js', $scenes, $output],
+                '/',
+                [...$application->servedEnvironment(), 'RECORD_URL' => $url, 'RECORD_REHEARSE' => $rehearse ? '1' : '0'],
+            );
+        } finally {
+            $stopWorkers();
+        }
+    });
+}
+
 function runAnalysis(Configuration $configuration, Slots $slots, string $key, Arguments $arguments): int
 {
     $check = $arguments->positional[1] ?? null;
@@ -279,7 +311,7 @@ try {
     $arguments = Arguments::parse(array_slice($argv, 2), in_array($argv[1] ?? null, ['test', 'e2e'], true));
     $key = $arguments->positional[0] ?? null;
 
-    if (in_array($argv[1] ?? null, ['test', 'analyse', 'serve', 'e2e'], true)) {
+    if (in_array($argv[1] ?? null, ['test', 'analyse', 'serve', 'e2e', 'record'], true)) {
         registerRun($arguments);
     }
 
@@ -288,10 +320,11 @@ try {
         'analyse' => runAnalysis($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
         'serve' => serveSlot($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
         'e2e' => runEndToEnd($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
+        'record' => recordScenes($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
         'status' => printStatus($configuration, $slots),
         'release' => releaseSlots($slots, $arguments),
         'abort' => abortRun($key ?? throw new RuntimeException('Name a run.')),
-        default => throw new RuntimeException('Commands: test, analyse, serve, e2e, status, release.'),
+        default => throw new RuntimeException('Commands: test, analyse, serve, e2e, record, status, release.'),
     });
 } catch (Throwable $exception) {
     fwrite(STDERR, $exception->getMessage() . "\n");

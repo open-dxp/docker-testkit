@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+## Description: testkit record, see testkit without arguments
+## Usage: record [path] <directory> [options]
+## ExecRaw: true
+
+exec "$DDEV_APPROOT/testkit" record "$@"

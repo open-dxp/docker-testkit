@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Testkit;
 
+use Closure;
 use FilesystemIterator;
 use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
@@ -206,6 +207,21 @@ final readonly class SlotApplication
     }
 
     /**
+     * Starts the message workers of the served slot, so jobs and asset processing run while a browser drives it.
+     *
+     * @return Closure(): void stops them
+     */
+    public function startWorkers(): Closure
+    {
+        return ProcessRunner::start(
+            $this->phpCommand('bin/console', 'messenger:consume', '--all'),
+            $this->applicationDirectory(),
+            $this->servedEnvironment(),
+            $this->slot->path . '/var/workers.log',
+        );
+    }
+
+    /**
      * Loads the story groups phpunit.xml configures for LoadFixtures.
      */
     public function loadStories(): void
@@ -231,7 +247,7 @@ final readonly class SlotApplication
      *
      * @return array<string, string>
      */
-    private function servedEnvironment(): array
+    public function servedEnvironment(): array
     {
         return [
             ...$this->testEnvironment(),

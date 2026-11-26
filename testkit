@@ -8,6 +8,7 @@ testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [pest options and te
 testkit analyse [path] [lint|phpstan|deptrac|phparkitect] [--baseline] [--php 8.3] [--db mariadb]
 testkit serve   [path] [--db mariadb] [--fresh]
 testkit e2e     [path] [--frontend path] [--db mariadb] [--fresh] [playwright options]
+testkit record  [path] <directory> [--output dir] [--rehearse] [--fresh]
 testkit status
 testkit release [path | --all]
 
@@ -88,7 +89,7 @@ command=${1:-}
 [ $# -gt 0 ] && shift
 
 case $command in
-    test | analyse | serve | e2e)
+    test | analyse | serve | e2e | record)
         target=$PWD
         # A checkout is the target. Any other path, such as tests/Feature/Cache, goes to Pest.
         if [ $# -gt 0 ] && [ -d "$1" ] && { [ -f "$1/composer.json" ] || [ -e "$1/.git" ]; }; then
@@ -117,6 +118,22 @@ case $command in
             synchronise "$frontend" "$testkit/app/sources/$key-frontend"
         fi
 
+        # A recording goes to <output>/<directory>, counted from the parent of <output>. The default output is var.
+        if [ "$command" = record ]; then
+            output=var
+            arguments=()
+            while [ $# -gt 0 ]; do
+                if [ "$1" = --output ]; then
+                    output=${2%/}
+                    shift 2
+                else
+                    arguments+=("$1")
+                    shift
+                fi
+            done
+            set -- ${arguments[@]+"${arguments[@]}"}
+        fi
+
         # The copy has no .git, so its newest tag travels along. It decides which version the copy reports.
         tag=$(git -C "$target" describe --tags --abbrev=0 2> /dev/null || true)
 
@@ -135,6 +152,16 @@ case $command in
                     rsync -a --delete "$testkit/app/sources/$key-frontend/$results/" "$frontend/$results/"
                 fi
             done
+        fi
+
+        if [ "$command" = record ] && [ -d "$testkit/app/.recordings/$key" ]; then
+            parent=$(dirname "$output")
+            while IFS= read -r recording; do
+                relative=${recording#"$parent"/}
+                [ "$parent" = . ] && relative=$recording
+                mkdir -p "$target/$output/$relative"
+                rsync -a --delete "$testkit/app/.recordings/$key/$recording/" "$target/$output/$relative/"
+            done < <(cd "$testkit/app/.recordings/$key" && find . -name marks.json -printf '%h\n' | sed 's|^\./||')
         fi
 
         if [ $exit_code -eq 0 ] && [[ " $* " == *" --baseline "* ]]; then
