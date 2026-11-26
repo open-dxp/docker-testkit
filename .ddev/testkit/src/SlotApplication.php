@@ -143,7 +143,7 @@ final readonly class SlotApplication
     {
         $directory = sprintf(self::FRONTEND, $this->slot->number);
         ProcessRunner::mustRun('Copying the frontend', [
-            'rsync', '-a', '--delete', '--exclude=/node_modules', '--exclude=/.next*', '--exclude=/.lock-hash',
+            'rsync', '-a', '--mkpath', '--delete', '--exclude=/node_modules', '--exclude=/.next*', '--exclude=/.lock-hash',
             $sourceDirectory . '/', $directory . '/',
         ], '/');
 
