@@ -58,6 +58,7 @@ testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [pest options and te
 testkit analyse [path] [lint|phpstan|deptrac|phparkitect] [--baseline] [--php 8.3] [--db mariadb]
 testkit serve   [path] [--php 8.3] [--db mariadb] [--fresh]
 testkit e2e     [path] [--frontend path] [--php 8.3] [--db mariadb] [--fresh] [playwright options]
+testkit record  [path] <directory> [--output dir] [--rehearse] [--fresh]
 testkit status
 testkit release [path | --all]
 ```
@@ -112,6 +113,40 @@ The default `memory: 4g` in `.ddev/testkit.yaml` covers tests and static checks.
 need more: a Next.js 16 production build took 4.3 to 5 GB. Set at least `6g` for `e2e`, better
 `8g`, since all slots share the container's memory. Run `ddev restart` afterwards. `e2e` reports
 when the kernel kills a process for lack of memory.
+
+## Recording
+
+`record` serves the slot, starts its message workers and lets Playwright play the scenes in
+`<directory>/scenes.js` in the admin. It writes `raw.mp4` at 1920x1080 and `marks.json`, the
+second of each mark in the video.
+
+```js
+module.exports = {
+    user: 'editor',
+    passwordVariable: 'EDITOR_PASSWORD',
+    async play({ page, mark, click, rehearse }) {
+        await page.evaluate(() => opendxp.helpers.openElement('/products/bike', 'object'));
+        mark('opened');
+        await click(page.getByText('Save & Publish'));
+    },
+};
+```
+
+| Argument | Meaning |
+|---|---|
+| `page` | the Playwright page, signed in as `user` |
+| `mark(label)` | notes the current second under `label` in `marks.json` |
+| `click(locator)` | moves the visible pointer to the element and clicks it |
+| `rehearse` | true with `--rehearse`. The scenes stop short of anything that costs money |
+
+The stories of the checkout create `user`. Its password comes from the variable that
+`passwordVariable` names. Declare it under `extra.opendxp-test.environment` and set it in
+`.ddev/testkit.yaml`, see [Variables of a project](#variables-of-a-project).
+
+The recording lands in `var/<directory>`. With `--output`, it lands in that folder, and
+`<directory>` counts from the folder's parent: `testkit record screencasts/demo --output
+screencasts/recordings` writes to `screencasts/recordings/demo`. When a scene fails, `error.png`
+shows the page at that moment.
 
 ## Variables of a project
 

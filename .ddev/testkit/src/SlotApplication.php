@@ -206,6 +206,34 @@ final readonly class SlotApplication
     }
 
     /**
+     * Starts the message workers of the served slot, so jobs and asset processing run while a browser drives it.
+     *
+     * @return \Closure(): void stops them
+     */
+    public function startWorkers(): \Closure
+    {
+        $variables = [];
+
+        foreach ([...getenv(), ...$this->servedEnvironment()] as $name => $value) {
+            $variables[] = $name . '=' . $value;
+        }
+
+        $log = $this->slot->path . '/var/workers.log';
+        $workers = proc_open(
+            $this->phpCommand('bin/console', 'messenger:consume', '--all', '--time-limit=1800', '--memory-limit=512M'),
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', $log, 'a'], 2 => ['file', $log, 'a']],
+            $pipes,
+            $this->applicationDirectory(),
+            $variables,
+        ) ?: throw new \RuntimeException('The message workers could not be started.');
+
+        return static function () use ($workers): void {
+            proc_terminate($workers);
+            proc_close($workers);
+        };
+    }
+
+    /**
      * Loads the story groups phpunit.xml configures for LoadFixtures.
      */
     public function loadStories(): void
@@ -231,7 +259,7 @@ final readonly class SlotApplication
      *
      * @return array<string, string>
      */
-    private function servedEnvironment(): array
+    public function servedEnvironment(): array
     {
         return [
             ...$this->testEnvironment(),
