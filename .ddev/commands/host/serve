@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+## Description: testkit serve, see testkit without arguments
+## Usage: serve [path] [options]
+## ExecRaw: true
+
+exec "$DDEV_APPROOT/testkit" serve "$@"

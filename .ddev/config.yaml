@@ -8,7 +8,7 @@ router_https_port: "443"
 composer_version: "2"
 fail_on_hook_fail: true
 additional_fqdns: []
-additional_hostnames: []
+additional_hostnames: ["*.testkit"]
 
 # The database servers are services generated from testkit.yaml, so ddev's own one is not needed.
 omit_containers: [db]

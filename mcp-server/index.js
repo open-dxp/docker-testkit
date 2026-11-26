@@ -35,6 +35,10 @@ question: one file, one filter.
 
 Every test runs in a transaction that is rolled back. Every run starts from a freshly installed
 database, so a write outside the transaction lasts only until the run ends.
+
+serve_slot opens the slot of the tests in a browser, with the stories its tests load. run_e2e runs
+the Playwright suite of a frontend against that slot and starts the frontend itself. Never start a
+browser, a dev server or Playwright on the host for this.
 `.trim();
 
 const location = {type: 'string', description: 'The absolute path of the bundle, core or project checkout.'};
@@ -69,6 +73,36 @@ const TOOLS = [
                 baseline: {type: 'boolean', description: 'Write the PHPStan baseline into the checkout instead of reporting. Everything PHPStan finds becomes accepted, so this is a decision, not a fix.'},
                 php,
                 database,
+            },
+            required: ['path'],
+        },
+    },
+    {
+        name: 'serve_slot',
+        description: 'Serves the slot of the tests of a checkout over https, from its installed database with the stories its tests load. Returns the address. It stays served until the next run of that slot.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                path: location,
+                php,
+                database,
+                fresh: {type: 'boolean', description: 'Build the slot again from nothing, for example after a dependency was released.'},
+            },
+            required: ['path'],
+        },
+    },
+    {
+        name: 'run_e2e',
+        description: 'Runs the Playwright suite of a frontend against the slot of its backend. Returns which specs failed and why.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                path: location,
+                frontend: {type: 'string', description: 'The absolute path of the frontend checkout. Leave out when it lies in frontend/app of the project.'},
+                grep: {type: 'string', description: 'Runs only the specs whose title matches, as playwright -g does.'},
+                php,
+                database,
+                fresh: {type: 'boolean', description: 'Build the slot again from nothing, for example after a dependency was released.'},
             },
             required: ['path'],
         },
@@ -116,6 +150,10 @@ const handlers = {
     ], seed === undefined ? {} : {FOUNDRY_FAKER_SEED: String(seed)}),
     run_analysis: ({path, check, baseline, ...rest}) => testkit([
         'analyse', path, ...(check ? [check] : []), ...(baseline ? ['--baseline'] : []), ...slotOptions(rest),
+    ]),
+    serve_slot: ({path, ...rest}) => testkit(['serve', path, ...slotOptions(rest)]),
+    run_e2e: ({path, frontend, grep, ...rest}) => testkit([
+        'e2e', path, ...slotOptions(rest), ...(frontend ? ['--frontend', frontend] : []), ...(grep ? ['--', '-g', grep] : []),
     ]),
     release_slots: ({path}) => testkit(['release', path ?? '--all']),
     testkit_status: () => testkit(['status']),

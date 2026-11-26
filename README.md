@@ -56,6 +56,8 @@ foundation in the version the package requires.
 ```
 testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [pest options and test paths]
 testkit analyse [path] [lint|phpstan|deptrac|phparkitect] [--baseline] [--php 8.3] [--db mariadb]
+testkit serve   [path] [--php 8.3] [--db mariadb] [--fresh]
+testkit e2e     [path] [--frontend path] [--php 8.3] [--db mariadb] [--fresh] [playwright options]
 testkit status
 testkit release [path | --all]
 ```
@@ -82,6 +84,35 @@ The testkit hands `FOUNDRY_FAKER_SEED` from your shell to the run:
 ```bash
 FOUNDRY_FAKER_SEED=819793 testkit test --filter=Headline
 ```
+
+## In a browser
+
+`serve` starts the slot of the tests from its installed database, loads the stories its tests load and
+serves it over https. It prints the address, such as `https://slot-2.testkit.ddev.site`. The slot
+also answers on `slot-2-api.testkit.ddev.site`, for an application that serves its API on a host of
+its own. It stays served until the next run of that slot, or until the testkit restarts.
+
+`e2e` runs the Playwright suite of a frontend against that slot. The frontend lies in `frontend/app`
+of the project, or in a checkout of its own that `--frontend` names. The testkit installs its
+packages and its browser and runs `npx playwright test` in it. The suite starts the frontend itself,
+through `webServer` in its `playwright.config.ts`. The run hands it these variables:
+
+| Variable | Value |
+|---|---|
+| `API_BASE_URI` | `https://slot-2-api.testkit.ddev.site` |
+| `E2E_BASE_URL` | `https://slot-2-web.testkit.ddev.site`, which leads to the frontend |
+| `E2E_PORT` | the port the frontend listens on, `3002` for slot 2 |
+| `NEXT_DIST_DIR` | `.next-e2e`, so the build does not mix with the one of development |
+
+The backend gets `E2E_HOST`, the host of the frontend, so a story can give a site that host.
+
+A slot is served with its own PHP version, also when the web server runs another one.
+
+The default of 4g for `memory` in `.ddev/testkit.yaml` is enough for tests and static checks. A
+frontend build is not: the production build of a Next.js 16 frontend took 4.3 to 5 GB of its own
+memory, with Turbopack and with webpack. `e2e` needs at least `memory: 6g`, and `8g` leaves room
+for a test run beside it, since every slot shares the memory of the container. Run `ddev restart`
+after the change. When the kernel ends a process for lack of memory, `e2e` says so.
 
 ## Variables of a project
 
@@ -196,7 +227,8 @@ testkit release --all
 ## Agents
 
 `mcp-server/` is an MCP server for Claude Code and any other client that speaks MCP. Its tools are
-`run_tests`, `run_analysis`, `release_slots` and `testkit_status`. Each takes the path of a checkout.
+`run_tests`, `run_analysis`, `serve_slot`, `run_e2e`, `release_slots` and `testkit_status`. Each
+takes the path of a checkout.
 
 ```bash
 claude mcp add --scope user opendxp-testkit -- node /path/to/docker-testkit/mcp-server/index.js
