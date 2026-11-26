@@ -87,32 +87,31 @@ FOUNDRY_FAKER_SEED=819793 testkit test --filter=Headline
 
 ## In a browser
 
-`serve` starts the slot of the tests from its installed database, loads the stories its tests load and
-serves it over https. It prints the address, such as `https://slot-2.testkit.ddev.site`. The slot
-also answers on `slot-2-api.testkit.ddev.site`, for an application that serves its API on a host of
-its own. It stays served until the next run of that slot, or until the testkit restarts.
+`serve` resets the slot database, loads the test stories and serves the slot over https, e.g.
+`https://slot-2.testkit.ddev.site`. `slot-2-api.testkit.ddev.site` is an alias for apps that serve
+their API on a separate host. The slot stays up until it runs again or the testkit restarts.
 
-`e2e` runs the Playwright suite of a frontend against that slot. The frontend lies in `frontend/app`
-of the project, or in a checkout of its own that `--frontend` names. The testkit installs its
-packages and its browser and runs `npx playwright test` in it. The suite starts the frontend itself,
-through `webServer` in its `playwright.config.ts`. The run hands it these variables:
+`e2e` serves the slot and runs a frontend's Playwright suite against it. The frontend is
+`frontend/app` in the project, or the checkout `--frontend` points to. The testkit installs its
+packages and browser and runs `npx playwright test`. The suite starts the frontend itself via
+`webServer` in `playwright.config.ts`. Test results are copied back into the frontend checkout.
 
 | Variable | Value |
 |---|---|
 | `API_BASE_URI` | `https://slot-2-api.testkit.ddev.site` |
-| `E2E_BASE_URL` | `https://slot-2-web.testkit.ddev.site`, which leads to the frontend |
-| `E2E_PORT` | the port the frontend listens on, `3002` for slot 2 |
-| `NEXT_DIST_DIR` | `.next-e2e`, so the build does not mix with the one of development |
+| `E2E_BASE_URL` | `https://slot-2-web.testkit.ddev.site`, proxied to the frontend |
+| `E2E_PORT` | frontend port, `3002` for slot 2 |
+| `NEXT_DIST_DIR` | `.next-e2e`, separate from the dev build |
+| `MAILPIT_API` | Mailpit API of the container, which receives the backend's mails |
 
-The backend gets `E2E_HOST`, the host of the frontend, so a story can give a site that host.
+The backend gets `E2E_HOST`, the frontend host, for stories that create a site.
 
-A slot is served with its own PHP version, also when the web server runs another one.
+Each slot runs its own PHP version, also when the web server runs another one.
 
-The default of 4g for `memory` in `.ddev/testkit.yaml` is enough for tests and static checks. A
-frontend build is not: the production build of a Next.js 16 frontend took 4.3 to 5 GB of its own
-memory, with Turbopack and with webpack. `e2e` needs at least `memory: 6g`, and `8g` leaves room
-for a test run beside it, since every slot shares the memory of the container. Run `ddev restart`
-after the change. When the kernel ends a process for lack of memory, `e2e` says so.
+The default `memory: 4g` in `.ddev/testkit.yaml` covers tests and static checks. Frontend builds
+need more: a Next.js 16 production build took 4.3 to 5 GB. Set at least `6g` for `e2e`, better
+`8g`, since all slots share the container's memory. Run `ddev restart` afterwards. `e2e` reports
+when the kernel kills a process for lack of memory.
 
 ## Variables of a project
 

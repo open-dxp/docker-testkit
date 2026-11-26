@@ -36,9 +36,9 @@ question: one file, one filter.
 Every test runs in a transaction that is rolled back. Every run starts from a freshly installed
 database, so a write outside the transaction lasts only until the run ends.
 
-serve_slot opens the slot of the tests in a browser, with the stories its tests load. run_e2e runs
-the Playwright suite of a frontend against that slot and starts the frontend itself. Never start a
-browser, a dev server or Playwright on the host for this.
+serve_slot serves the test slot over https with the test stories loaded. run_e2e runs a frontend's
+Playwright suite against it and starts the frontend itself. Never start a browser, dev server or
+Playwright on the host for this.
 `.trim();
 
 const location = {type: 'string', description: 'The absolute path of the bundle, core or project checkout.'};
@@ -79,7 +79,7 @@ const TOOLS = [
     },
     {
         name: 'serve_slot',
-        description: 'Serves the slot of the tests of a checkout over https, from its installed database with the stories its tests load. Returns the address. It stays served until the next run of that slot.',
+        description: 'Serves the test slot of a checkout over https, with a fresh database and the test stories loaded. Returns the URL. Stays up until the slot runs again.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -93,13 +93,13 @@ const TOOLS = [
     },
     {
         name: 'run_e2e',
-        description: 'Runs the Playwright suite of a frontend against the slot of its backend. Returns which specs failed and why.',
+        description: "Runs a frontend's Playwright suite against the backend's test slot. Returns failed specs with reasons.",
         inputSchema: {
             type: 'object',
             properties: {
                 path: location,
-                frontend: {type: 'string', description: 'The absolute path of the frontend checkout. Leave out when it lies in frontend/app of the project.'},
-                grep: {type: 'string', description: 'Runs only the specs whose title matches, as playwright -g does.'},
+                frontend: {type: 'string', description: 'Absolute path of the frontend checkout. Defaults to frontend/app in the project.'},
+                grep: {type: 'string', description: 'Only specs whose title matches, like playwright -g.'},
                 php,
                 database,
                 fresh: {type: 'boolean', description: 'Build the slot again from nothing, for example after a dependency was released.'},

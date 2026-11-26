@@ -100,7 +100,7 @@ case $command in
 
         synchronise "$target" "$testkit/app/sources/$key"
 
-        # A frontend lies in frontend/app of the project, or in a checkout of its own that --frontend names.
+        # Frontend: frontend/app in the project, or the checkout --frontend points to.
         if [ "$command" = e2e ]; then
             frontend=$target/frontend/app
             arguments=()
@@ -128,7 +128,7 @@ case $command in
         exit_code=0
         in_container "$command" "$key" --tag "$tag" --run "$run_id" "$@" || exit_code=$?
 
-        # The results of a frontend suite go to its checkout, which ignores them.
+        # Copy frontend test results into the checkout, which git-ignores them.
         if [ "$command" = e2e ]; then
             for results in test-results playwright-report; do
                 if [ -d "$testkit/app/sources/$key-frontend/$results" ]; then

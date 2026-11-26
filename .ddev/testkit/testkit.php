@@ -59,7 +59,7 @@ function runTests(Configuration $configuration, Slots $slots, string $key, Argum
 }
 
 /**
- * Starts the slot of the tests from its installed database with the stories the tests load, and serves it.
+ * Resets the slot database, loads the test stories and serves the slot.
  */
 function serveApplication(SlotApplication $application): string
 {
@@ -80,7 +80,7 @@ function serveSlot(Configuration $configuration, Slots $slots, string $key, Argu
 }
 
 /**
- * The kernel counts the processes it ended because the container had no memory left.
+ * Processes the kernel OOM-killed in this container.
  */
 function countKilledForMemory(): int
 {
@@ -90,7 +90,7 @@ function countKilledForMemory(): int
 }
 
 /**
- * Runs the Playwright suite of a frontend against the slot of its backend. The suite starts the frontend itself.
+ * Runs a frontend's Playwright suite against its backend slot. The suite starts the frontend via webServer.
  */
 function runEndToEnd(Configuration $configuration, Slots $slots, string $key, Arguments $arguments): int
 {
@@ -103,14 +103,14 @@ function runEndToEnd(Configuration $configuration, Slots $slots, string $key, Ar
         $directory = $application->prepareFrontend($frontend);
 
         $exitCode = ProcessRunner::run(
-            // Node sees every CPU of the machine. Kept to the CPUs of the container, the build of a frontend needs
-            // less memory and leaves the other slots their share.
+            // Node sizes builds and workers by the host's CPUs. Pinning to the container's CPUs cuts build memory and
+            // leaves CPU to other slots.
             ['taskset', '-c', '0-' . max(0, (int) ceil($configuration->cpus) - 1), 'npx', 'playwright', 'test', '--reporter=line', ...$playwrightArguments],
             $directory,
             $application->frontendEnvironment(),
         );
 
-        // The results go back with the copy, so the shell hands them to the checkout of the frontend.
+        // Results go back to the synced source. The shell script copies them into the frontend checkout.
         foreach (['test-results', 'playwright-report'] as $results) {
             if (is_dir($directory . '/' . $results)) {
                 ProcessRunner::run(['rsync', '-a', '--delete', $directory . '/' . $results . '/', $frontend . '/' . $results . '/'], '/');
@@ -118,7 +118,7 @@ function runEndToEnd(Configuration $configuration, Slots $slots, string $key, Ar
         }
 
         if (countKilledForMemory() > $killedBefore) {
-            fprintf(STDERR, "The container ran out of memory and the kernel ended a process, such as the build of the frontend. Raise memory in .ddev/testkit.yaml (now %s) and run ddev restart.\n", $configuration->memory);
+            fprintf(STDERR, "Out of memory: the kernel killed a process, e.g. the frontend build. Raise memory in .ddev/testkit.yaml (currently %s) and run ddev restart.\n", $configuration->memory);
         }
 
         return $exitCode;
