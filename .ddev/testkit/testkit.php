@@ -107,7 +107,9 @@ function runEndToEnd(Configuration $configuration, Slots $slots, string $key, Ar
         $killedBefore = countKilledForMemory();
 
         $exitCode = ProcessRunner::run(
-            ['npx', 'playwright', 'test', '--reporter=line', ...$playwrightArguments],
+            // Node sees every CPU of the machine. Kept to the CPUs of the container, the build of a frontend needs
+            // less memory and leaves the other slots their share.
+            ['taskset', '-c', '0-' . max(0, (int) ceil($configuration->cpus) - 1), 'npx', 'playwright', 'test', '--reporter=line', ...$playwrightArguments],
             $application->prepareFrontend($frontend),
             $application->frontendEnvironment(),
         );

@@ -94,16 +94,27 @@ final readonly class SlotApplication
     {
         $host = sprintf(self::HOST, $this->slot->number);
         $root = $this->applicationDirectory() . '/public';
+        // A request runs the kernel of the tests in this application, as the console of the tests does. The packages
+        // lie behind symlinks, so the root is named rather than found.
+        $served = [
+            ...$this->testEnvironment(),
+            'OPENDXP_PROJECT_ROOT' => $this->applicationDirectory(),
+            'OPENDXP_KERNEL_CLASS' => $this->readKernelClass(),
+            // Mails of a served slot land in the Mailpit of the container, where a frontend suite can read them.
+            'MAILER_DSN' => 'smtp://localhost:1025',
+        ];
         $environment = implode('', array_map(
             static fn (string $name, string $value): string => sprintf("    SetEnv %s \"%s\"\n", $name, addcslashes($value, '"\\')),
-            array_keys($this->testEnvironment()),
-            $this->testEnvironment(),
+            array_keys($served),
+            $served,
         ));
 
         $backend = self::buildSite(
             sprintf("    ServerName %s\n    ServerAlias %s\n    DocumentRoot %s\n", $host, sprintf(self::API_HOST, $this->slot->number), $root)
             . sprintf("    <Directory \"%s/\">\n        AllowOverride All\n        Require all granted\n        FallbackResource /index.php\n    </Directory>\n", $root)
-            . sprintf("    <FilesMatch \"\\.php$\">\n        SetHandler \"proxy:unix:%s|fcgi://localhost\"\n    </FilesMatch>\n", $this->startPhp())
+            // The web server hands PHP to its own version inside an <If>, which Apache applies last. An <If> of the
+            // host comes after it.
+            . sprintf("    <FilesMatch \"\\.php$\">\n        <If \"-f %%{REQUEST_FILENAME}\">\n            SetHandler \"proxy:unix:%s|fcgi://localhost\"\n        </If>\n    </FilesMatch>\n", $this->startPhp())
             . "    SetEnvIf X-Forwarded-Proto \"https\" HTTPS=on\n" . $environment,
         );
         $frontend = self::buildSite(sprintf(
@@ -156,6 +167,7 @@ final readonly class SlotApplication
             'E2E_BASE_URL' => 'https://' . sprintf(self::WEB_HOST, $this->slot->number),
             'E2E_PORT' => (string) $this->webPort(),
             'NEXT_DIST_DIR' => '.next-e2e',
+            'MAILPIT_API' => 'http://localhost:8025/api/v1',
             // The router of ddev signs with the mkcert root, which node does not know on its own.
             'NODE_EXTRA_CA_CERTS' => '/etc/ssl/certs/ca-certificates.crt',
             'PLAYWRIGHT_BROWSERS_PATH' => self::BROWSERS,
@@ -188,6 +200,20 @@ final readonly class SlotApplication
         }
 
         return $pool . '.sock';
+    }
+
+    private function readKernelClass(): string
+    {
+        foreach (['phpunit.xml', 'phpunit.xml.dist'] as $file) {
+            $configuration = @simplexml_load_file($this->applicationDirectory() . '/' . $file);
+            $kernelClass = $configuration === false ? [] : $configuration->xpath('/phpunit/php/*[@name="KERNEL_CLASS"]/@value');
+
+            if (($kernelClass[0] ?? null) !== null) {
+                return (string) $kernelClass[0];
+            }
+        }
+
+        throw new \RuntimeException('The phpunit.xml of the application names no KERNEL_CLASS.');
     }
 
     private function webPort(): int
