@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+## Description: testkit e2e, see testkit without arguments
+## Usage: e2e [path] [options]
+## ExecRaw: true
+
+exec "$DDEV_APPROOT/testkit" e2e "$@"

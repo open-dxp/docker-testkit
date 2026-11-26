@@ -7,6 +7,7 @@ usage() {
 testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [pest options and test paths]
 testkit analyse [path] [lint|phpstan|deptrac|phparkitect] [--baseline] [--php 8.3] [--db mariadb]
 testkit serve   [path] [--db mariadb] [--fresh]
+testkit e2e     [path] [--frontend path] [--db mariadb] [--fresh] [playwright options]
 testkit status
 testkit release [path | --all]
 
@@ -87,7 +88,7 @@ command=${1:-}
 [ $# -gt 0 ] && shift
 
 case $command in
-    test | analyse | serve)
+    test | analyse | serve | e2e)
         target=$PWD
         # A checkout is the target. Any other path, such as tests/Feature/Cache, goes to Pest.
         if [ $# -gt 0 ] && [ -d "$1" ] && { [ -f "$1/composer.json" ] || [ -e "$1/.git" ]; }; then
@@ -98,6 +99,23 @@ case $command in
         key=$(key_of "$target")
 
         synchronise "$target" "$testkit/app/sources/$key"
+
+        # A frontend lies in frontend/app of the project, or in a checkout of its own that --frontend names.
+        if [ "$command" = e2e ]; then
+            frontend=$target/frontend/app
+            arguments=()
+            while [ $# -gt 0 ]; do
+                if [ "$1" = --frontend ]; then
+                    frontend=$(cd "$2" && pwd)
+                    shift 2
+                else
+                    arguments+=("$1")
+                    shift
+                fi
+            done
+            set -- --frontend "$key-frontend" ${arguments[@]+"${arguments[@]}"}
+            synchronise "$frontend" "$testkit/app/sources/$key-frontend"
+        fi
 
         # The copy has no .git, so its newest tag travels along. It decides which version the copy reports.
         tag=$(git -C "$target" describe --tags --abbrev=0 2> /dev/null || true)

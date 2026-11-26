@@ -59,28 +59,64 @@ function runTests(Configuration $configuration, Slots $slots, string $key, Argum
 }
 
 /**
- * Opens the slot of the tests in a browser, with the stories the tests load.
+ * Starts the slot of the tests from its installed database with the stories the tests load, and serves it.
  */
+function serveApplication(SlotApplication $application): string
+{
+    $application->restoreInstalledDatabase();
+    ProcessRunner::mustRun(
+        'Loading the stories',
+        $application->phpCommand('vendor/bin/opendxp-test', 'fixtures'),
+        $application->applicationDirectory(),
+        $application->testEnvironment(),
+    );
+
+    return $application->serve();
+}
+
 function serveSlot(Configuration $configuration, Slots $slots, string $key, Arguments $arguments): int
 {
-    $webPhpVersion = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
-
-    if (($arguments->options['php'] ?? $configuration->defaultPhpVersion) !== $webPhpVersion) {
-        throw new RuntimeException(sprintf('The web server runs PHP %s, so a slot is served with that version.', $webPhpVersion));
-    }
 
     return runInSlot($configuration, $slots, $key, 'test', $arguments, static function (SlotApplication $application): int {
-        $application->restoreInstalledDatabase();
-        ProcessRunner::mustRun(
-            'Loading the stories',
-            $application->phpCommand('vendor/bin/opendxp-test', 'fixtures'),
-            $application->applicationDirectory(),
-            $application->testEnvironment(),
-        );
-
-        echo $application->serve(), "\n";
+        echo serveApplication($application), "\n";
 
         return 0;
+    });
+}
+
+/**
+ * The kernel counts the processes it ended because the container had no memory left.
+ */
+function countKilledForMemory(): int
+{
+    preg_match('/^oom_kill (\d+)$/m', (string) @file_get_contents('/sys/fs/cgroup/memory.events'), $match);
+
+    return (int) ($match[1] ?? 0);
+}
+
+/**
+ * Runs the Playwright suite of a frontend against the slot of its backend. The suite starts the frontend itself.
+ */
+function runEndToEnd(Configuration $configuration, Slots $slots, string $key, Arguments $arguments): int
+{
+    $frontend = APPLICATIONS_DIRECTORY . '/sources/' . ($arguments->options['frontend'] ?? throw new RuntimeException('Name the frontend.'));
+    $playwrightArguments = $arguments->passedOn;
+
+    return runInSlot($configuration, $slots, $key, 'test', $arguments, static function (SlotApplication $application) use ($configuration, $frontend, $playwrightArguments): int {
+        serveApplication($application);
+        $killedBefore = countKilledForMemory();
+
+        $exitCode = ProcessRunner::run(
+            ['npx', 'playwright', 'test', '--reporter=line', ...$playwrightArguments],
+            $application->prepareFrontend($frontend),
+            $application->frontendEnvironment(),
+        );
+
+        if (countKilledForMemory() > $killedBefore) {
+            fprintf(STDERR, "The container ran out of memory and the kernel ended a process, such as the build of the frontend. Raise memory in .ddev/testkit.yaml (now %s) and run ddev restart.\n", $configuration->memory);
+        }
+
+        return $exitCode;
     });
 }
 
@@ -235,10 +271,10 @@ function removeUnusedSources(Slots $slots): void
 try {
     $configuration = Configuration::load(dirname(__DIR__));
     $slots = new Slots(APPLICATIONS_DIRECTORY, $configuration->slots);
-    $arguments = Arguments::parse(array_slice($argv, 2), ($argv[1] ?? null) === 'test');
+    $arguments = Arguments::parse(array_slice($argv, 2), in_array($argv[1] ?? null, ['test', 'e2e'], true));
     $key = $arguments->positional[0] ?? null;
 
-    if (in_array($argv[1] ?? null, ['test', 'analyse', 'serve'], true)) {
+    if (in_array($argv[1] ?? null, ['test', 'analyse', 'serve', 'e2e'], true)) {
         registerRun($arguments);
     }
 
@@ -246,10 +282,11 @@ try {
         'test' => runTests($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
         'analyse' => runAnalysis($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
         'serve' => serveSlot($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
+        'e2e' => runEndToEnd($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
         'status' => printStatus($configuration, $slots),
         'release' => releaseSlots($slots, $arguments),
         'abort' => abortRun($key ?? throw new RuntimeException('Name a run.')),
-        default => throw new RuntimeException('Commands: test, analyse, serve, status, release.'),
+        default => throw new RuntimeException('Commands: test, analyse, serve, e2e, status, release.'),
     });
 } catch (Throwable $exception) {
     fwrite(STDERR, $exception->getMessage() . "\n");

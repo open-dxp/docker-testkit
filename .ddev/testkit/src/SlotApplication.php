@@ -16,9 +16,18 @@ final readonly class SlotApplication
     private const string INSTALLATION_DUMP = '/.installation.sql';
     private const string INSTALLATION_CHECKSUM = '/.installation.checksum';
 
-    // Each slot answers on a name of its own below the wildcard that .ddev/config.yaml registers.
+    // Each slot answers on names of its own below the wildcard that .ddev/config.yaml registers. The headless API
+    // answers only on a host that matches "-api.", and a frontend gets a host and a port of its own.
     private const string HOST = 'slot-%d.testkit.ddev.site';
+    private const string API_HOST = 'slot-%d-api.testkit.ddev.site';
+    private const string WEB_HOST = 'slot-%d-web.testkit.ddev.site';
+    private const int WEB_PORT = 3000;
     private const string SITE = '/etc/apache2/sites-enabled/testkit-slot-%d.conf';
+    // Beside the slot, because a project is copied into the slot with --delete.
+    private const string FRONTEND = '/var/www/html/app/.frontends/slot-%d';
+    private const string BROWSERS = '/var/www/html/app/.playwright';
+    private const string WEB_PHP_SOCKET = '/run/php/php-fpm.sock';
+    private const string PHP_POOL = '/var/www/html/app/.php-fpm/php%s';
 
     public function __construct(
         private Configuration $configuration,
@@ -75,8 +84,8 @@ final readonly class SlotApplication
     }
 
     /**
-     * Answers requests for the slot with its test kernel, its database and its environment, until the container
-     * restarts. The web server runs the PHP of the container, so the slot has to be built with that version.
+     * Answers requests for the slot with its test kernel, its database, its environment and its PHP version, until the
+     * container restarts. The host of the frontend is passed on to a frontend the slot runs.
      *
      * @return string the address of the slot
      */
@@ -89,18 +98,111 @@ final readonly class SlotApplication
             array_keys($this->testEnvironment()),
             $this->testEnvironment(),
         ));
+
+        $backend = self::buildSite(
+            sprintf("    ServerName %s\n    ServerAlias %s\n    DocumentRoot %s\n", $host, sprintf(self::API_HOST, $this->slot->number), $root)
+            . sprintf("    <Directory \"%s/\">\n        AllowOverride All\n        Require all granted\n        FallbackResource /index.php\n    </Directory>\n", $root)
+            . sprintf("    <FilesMatch \"\\.php$\">\n        SetHandler \"proxy:unix:%s|fcgi://localhost\"\n    </FilesMatch>\n", $this->startPhp())
+            . "    SetEnvIf X-Forwarded-Proto \"https\" HTTPS=on\n" . $environment,
+        );
+        $frontend = self::buildSite(sprintf(
+            "    ServerName %s\n    ProxyPreserveHost On\n    ProxyPass / http://localhost:%d/\n    ProxyPassReverse / http://localhost:%d/\n",
+            sprintf(self::WEB_HOST, $this->slot->number),
+            $this->webPort(),
+            $this->webPort(),
+        ));
+
+        file_put_contents(sprintf(self::SITE, $this->slot->number), $backend . $frontend);
+        ProcessRunner::mustRun('Reloading the web server', ['sudo', 'sh', '-c', 'a2enmod -q proxy_http && apache2ctl graceful'], '/');
+
+        return 'https://' . $host;
+    }
+
+    /**
+     * Copies the frontend next to the slot and installs its packages and its browser, each only when it changed.
+     *
+     * @return string the directory the frontend runs in
+     */
+    public function prepareFrontend(string $sourceDirectory): string
+    {
+        $directory = sprintf(self::FRONTEND, $this->slot->number);
+        ProcessRunner::mustRun('Copying the frontend', [
+            'rsync', '-a', '--delete', '--exclude=/node_modules', '--exclude=/.next*', '--exclude=/.lock-hash',
+            $sourceDirectory . '/', $directory . '/',
+        ], '/');
+
+        $lockHash = hash_file('sha256', $directory . '/package-lock.json') ?: '';
+
+        if (@file_get_contents($directory . '/.lock-hash') !== $lockHash) {
+            ProcessRunner::mustRun('Installing the packages of the frontend', ['npm', 'ci', '--no-audit', '--no-fund'], $directory);
+            file_put_contents($directory . '/.lock-hash', $lockHash);
+        }
+
+        ProcessRunner::mustRun('Installing the browser of the frontend', ['npx', 'playwright', 'install', 'chromium'], $directory, $this->frontendEnvironment());
+
+        return $directory;
+    }
+
+    /**
+     * What a frontend needs to find the slot: the API, its own host and port, and the browser the testkit keeps.
+     *
+     * @return array<string, string>
+     */
+    public function frontendEnvironment(): array
+    {
+        return [
+            'API_BASE_URI' => 'https://' . sprintf(self::API_HOST, $this->slot->number),
+            'E2E_BASE_URL' => 'https://' . sprintf(self::WEB_HOST, $this->slot->number),
+            'E2E_PORT' => (string) $this->webPort(),
+            'NEXT_DIST_DIR' => '.next-e2e',
+            // The router of ddev signs with the mkcert root, which node does not know on its own.
+            'NODE_EXTRA_CA_CERTS' => '/etc/ssl/certs/ca-certificates.crt',
+            'PLAYWRIGHT_BROWSERS_PATH' => self::BROWSERS,
+        ];
+    }
+
+    /**
+     * The web server runs the PHP of the container. Another version gets a process of its own, shared by every slot
+     * of that version.
+     *
+     * @return string the socket that runs the PHP of the slot
+     */
+    private function startPhp(): string
+    {
+        if ($this->phpVersion === PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION) {
+            return self::WEB_PHP_SOCKET;
+        }
+
+        $pool = sprintf(self::PHP_POOL, $this->phpVersion);
+        $pid = (int) @file_get_contents($pool . '.pid');
+
+        if ($pid === 0 || !posix_kill($pid, 0)) {
+            @mkdir(dirname($pool), 0777, true);
+            file_put_contents($pool . '.conf', sprintf(
+                "[global]\npid = %1\$s.pid\nerror_log = /proc/self/fd/2\n\n[slots]\nlisten = %1\$s.sock\nlisten.mode = 0666\n"
+                . "pm = ondemand\npm.max_children = 8\nclear_env = no\n",
+                $pool,
+            ));
+            ProcessRunner::mustRun('Starting PHP ' . $this->phpVersion, ['php-fpm' . $this->phpVersion, '--fpm-config', $pool . '.conf'], '/');
+        }
+
+        return $pool . '.sock';
+    }
+
+    private function webPort(): int
+    {
+        return self::WEB_PORT + $this->slot->number;
+    }
+
+    private static function buildSite(string $body): string
+    {
         $site = '';
 
         foreach (['80' => '', '443' => "    SSLEngine on\n    SSLCertificateFile /etc/ssl/certs/master.crt\n    SSLCertificateKeyFile /etc/ssl/certs/master.key\n"] as $port => $tls) {
-            $site .= "<VirtualHost *:{$port}>\n{$tls}    ServerName {$host}\n    DocumentRoot {$root}\n"
-                . "    <Directory \"{$root}/\">\n        AllowOverride All\n        Require all granted\n        FallbackResource /index.php\n    </Directory>\n"
-                . "    SetEnvIf X-Forwarded-Proto \"https\" HTTPS=on\n{$environment}    ErrorLog /dev/stdout\n</VirtualHost>\n";
+            $site .= "<VirtualHost *:{$port}>\n{$tls}{$body}    ErrorLog /dev/stdout\n</VirtualHost>\n";
         }
 
-        file_put_contents(sprintf(self::SITE, $this->slot->number), $site);
-        ProcessRunner::mustRun('Reloading the web server', ['sudo', 'apache2ctl', 'graceful'], '/');
-
-        return 'https://' . $host;
+        return $site;
     }
 
     /**
@@ -341,6 +443,8 @@ final readonly class SlotApplication
             'DATABASE_URL' => sprintf('mysql://root:root@%s:3306/%s', $this->databaseServer, $this->slot->databaseName),
             'DATABASE_SERVER_VERSION' => $this->databaseServerVersion(),
             'TMPDIR' => $this->slot->path . '/.tmp',
+            // The stories of a headless project give their site the host its frontend answers on.
+            'E2E_HOST' => sprintf(self::WEB_HOST, $this->slot->number),
         ];
     }
 
