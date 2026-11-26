@@ -16,8 +16,9 @@ final readonly class SlotApplication
     private const string INSTALLATION_DUMP = '/.installation.sql';
     private const string INSTALLATION_CHECKSUM = '/.installation.checksum';
 
-    // Each slot answers on names of its own below the wildcard that .ddev/config.yaml registers. The headless API
-    // answers only on a host that matches "-api.", and a frontend gets a host and a port of its own.
+    // Each slot answers on names of its own below the wildcard that .ddev/config.yaml registers: one for the
+    // application, one ending in "-api" for an application that serves its API on a host of its own, and one with a
+    // port of its own for a frontend.
     private const string HOST = 'slot-%d.testkit.ddev.site';
     private const string API_HOST = 'slot-%d-api.testkit.ddev.site';
     private const string WEB_HOST = 'slot-%d-web.testkit.ddev.site';
@@ -443,7 +444,7 @@ final readonly class SlotApplication
             'DATABASE_URL' => sprintf('mysql://root:root@%s:3306/%s', $this->databaseServer, $this->slot->databaseName),
             'DATABASE_SERVER_VERSION' => $this->databaseServerVersion(),
             'TMPDIR' => $this->slot->path . '/.tmp',
-            // The stories of a headless project give their site the host its frontend answers on.
+            // The host a frontend of the slot answers on, for a story that sets up a site for it.
             'E2E_HOST' => sprintf(self::WEB_HOST, $this->slot->number),
         ];
     }
