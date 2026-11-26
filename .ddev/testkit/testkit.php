@@ -64,12 +64,7 @@ function runTests(Configuration $configuration, Slots $slots, string $key, Argum
 function serveApplication(SlotApplication $application): string
 {
     $application->restoreInstalledDatabase();
-    ProcessRunner::mustRun(
-        'Loading the stories',
-        $application->phpCommand('vendor/bin/opendxp-test', 'fixtures'),
-        $application->applicationDirectory(),
-        $application->testEnvironment(),
-    );
+    $application->loadStories();
 
     return $application->serve();
 }

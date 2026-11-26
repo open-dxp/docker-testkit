@@ -94,15 +94,7 @@ final readonly class SlotApplication
     {
         $host = sprintf(self::HOST, $this->slot->number);
         $root = $this->applicationDirectory() . '/public';
-        // A request runs the kernel of the tests in this application, as the console of the tests does. The packages
-        // lie behind symlinks, so the root is named rather than found.
-        $served = [
-            ...$this->testEnvironment(),
-            'OPENDXP_PROJECT_ROOT' => $this->applicationDirectory(),
-            'OPENDXP_KERNEL_CLASS' => $this->readKernelClass(),
-            // Mails of a served slot land in the Mailpit of the container, where a frontend suite can read them.
-            'MAILER_DSN' => 'smtp://localhost:1025',
-        ];
+        $served = $this->servedEnvironment();
         $environment = implode('', array_map(
             static fn (string $name, string $value): string => sprintf("    SetEnv %s \"%s\"\n", $name, addcslashes($value, '"\\')),
             array_keys($served),
@@ -202,18 +194,57 @@ final readonly class SlotApplication
         return $pool . '.sock';
     }
 
-    private function readKernelClass(): string
+    /**
+     * Loads the story groups the tests load before they run, as phpunit.xml names them for LoadFixtures.
+     */
+    public function loadStories(): void
+    {
+        $groups = array_filter(array_map(trim(...), explode(',', $this->readTestConfiguration(
+            '/phpunit/extensions/bootstrap[@class="OpenDxp\\TestFoundation\\PHPUnit\\LoadFixtures"]/parameter[@name="fixtures"]/@value',
+        ) ?? '')));
+
+        if ($groups === []) {
+            return;
+        }
+
+        ProcessRunner::mustRun(
+            'Loading the stories',
+            $this->phpCommand('bin/console', 'foundry:load-fixtures', '--append', ...$groups),
+            $this->applicationDirectory(),
+            $this->servedEnvironment(),
+        );
+    }
+
+    /**
+     * A served slot runs the kernel of the tests in this application, as the console of the tests does. The packages
+     * lie behind symlinks, so the root is named rather than found.
+     *
+     * @return array<string, string>
+     */
+    private function servedEnvironment(): array
+    {
+        return [
+            ...$this->testEnvironment(),
+            'OPENDXP_PROJECT_ROOT' => $this->applicationDirectory(),
+            'OPENDXP_KERNEL_CLASS' => $this->readTestConfiguration('/phpunit/php/*[@name="KERNEL_CLASS"]/@value')
+                ?? throw new \RuntimeException('The phpunit.xml of the application names no KERNEL_CLASS.'),
+            // Mails of a served slot land in the Mailpit of the container, where a frontend suite can read them.
+            'MAILER_DSN' => 'smtp://localhost:1025',
+        ];
+    }
+
+    private function readTestConfiguration(string $path): ?string
     {
         foreach (['phpunit.xml', 'phpunit.xml.dist'] as $file) {
             $configuration = @simplexml_load_file($this->applicationDirectory() . '/' . $file);
-            $kernelClass = $configuration === false ? [] : $configuration->xpath('/phpunit/php/*[@name="KERNEL_CLASS"]/@value');
+            $value = $configuration === false ? [] : $configuration->xpath($path);
 
-            if (($kernelClass[0] ?? null) !== null) {
-                return (string) $kernelClass[0];
+            if (($value[0] ?? null) !== null) {
+                return (string) $value[0];
             }
         }
 
-        throw new \RuntimeException('The phpunit.xml of the application names no KERNEL_CLASS.');
+        return null;
     }
 
     private function webPort(): int
