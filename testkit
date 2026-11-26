@@ -6,6 +6,7 @@ usage() {
     cat >&2 <<'EOF'
 testkit test    [path] [--php 8.3] [--db mariadb] [--fresh] [pest options and test paths]
 testkit analyse [path] [lint|phpstan|deptrac|phparkitect] [--baseline] [--php 8.3] [--db mariadb]
+testkit serve   [path] [--db mariadb] [--fresh]
 testkit status
 testkit release [path | --all]
 
@@ -86,7 +87,7 @@ command=${1:-}
 [ $# -gt 0 ] && shift
 
 case $command in
-    test | analyse)
+    test | analyse | serve)
         target=$PWD
         # A checkout is the target. Any other path, such as tests/Feature/Cache, goes to Pest.
         if [ $# -gt 0 ] && [ -d "$1" ] && { [ -f "$1/composer.json" ] || [ -e "$1/.git" ]; }; then

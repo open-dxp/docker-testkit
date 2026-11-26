@@ -58,6 +58,32 @@ function runTests(Configuration $configuration, Slots $slots, string $key, Argum
     });
 }
 
+/**
+ * Opens the slot of the tests in a browser, with the stories the tests load.
+ */
+function serveSlot(Configuration $configuration, Slots $slots, string $key, Arguments $arguments): int
+{
+    $webPhpVersion = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+
+    if (($arguments->options['php'] ?? $configuration->defaultPhpVersion) !== $webPhpVersion) {
+        throw new RuntimeException(sprintf('The web server runs PHP %s, so a slot is served with that version.', $webPhpVersion));
+    }
+
+    return runInSlot($configuration, $slots, $key, 'test', $arguments, static function (SlotApplication $application): int {
+        $application->restoreInstalledDatabase();
+        ProcessRunner::mustRun(
+            'Loading the stories',
+            $application->phpCommand('vendor/bin/opendxp-test', 'fixtures'),
+            $application->applicationDirectory(),
+            $application->testEnvironment(),
+        );
+
+        echo $application->serve(), "\n";
+
+        return 0;
+    });
+}
+
 function runAnalysis(Configuration $configuration, Slots $slots, string $key, Arguments $arguments): int
 {
     $check = $arguments->positional[1] ?? null;
@@ -212,17 +238,18 @@ try {
     $arguments = Arguments::parse(array_slice($argv, 2), ($argv[1] ?? null) === 'test');
     $key = $arguments->positional[0] ?? null;
 
-    if (in_array($argv[1] ?? null, ['test', 'analyse'], true)) {
+    if (in_array($argv[1] ?? null, ['test', 'analyse', 'serve'], true)) {
         registerRun($arguments);
     }
 
     exit(match ($argv[1] ?? null) {
         'test' => runTests($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
         'analyse' => runAnalysis($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
+        'serve' => serveSlot($configuration, $slots, $key ?? throw new RuntimeException('Name a target.'), $arguments),
         'status' => printStatus($configuration, $slots),
         'release' => releaseSlots($slots, $arguments),
         'abort' => abortRun($key ?? throw new RuntimeException('Name a run.')),
-        default => throw new RuntimeException('Commands: test, analyse, status, release.'),
+        default => throw new RuntimeException('Commands: test, analyse, serve, status, release.'),
     });
 } catch (Throwable $exception) {
     fwrite(STDERR, $exception->getMessage() . "\n");

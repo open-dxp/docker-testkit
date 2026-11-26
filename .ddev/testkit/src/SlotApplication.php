@@ -16,6 +16,10 @@ final readonly class SlotApplication
     private const string INSTALLATION_DUMP = '/.installation.sql';
     private const string INSTALLATION_CHECKSUM = '/.installation.checksum';
 
+    // Each slot answers on a name of its own below the wildcard that .ddev/config.yaml registers.
+    private const string HOST = 'slot-%d.testkit.ddev.site';
+    private const string SITE = '/etc/apache2/sites-enabled/testkit-slot-%d.conf';
+
     public function __construct(
         private Configuration $configuration,
         private Target $target,
@@ -68,6 +72,35 @@ final readonly class SlotApplication
     public function phpCommand(string ...$arguments): array
     {
         return ['php' . $this->phpVersion, ...array_values($arguments)];
+    }
+
+    /**
+     * Answers requests for the slot with its test kernel, its database and its environment, until the container
+     * restarts. The web server runs the PHP of the container, so the slot has to be built with that version.
+     *
+     * @return string the address of the slot
+     */
+    public function serve(): string
+    {
+        $host = sprintf(self::HOST, $this->slot->number);
+        $root = $this->applicationDirectory() . '/public';
+        $environment = implode('', array_map(
+            static fn (string $name, string $value): string => sprintf("    SetEnv %s \"%s\"\n", $name, addcslashes($value, '"\\')),
+            array_keys($this->testEnvironment()),
+            $this->testEnvironment(),
+        ));
+        $site = '';
+
+        foreach (['80' => '', '443' => "    SSLEngine on\n    SSLCertificateFile /etc/ssl/certs/master.crt\n    SSLCertificateKeyFile /etc/ssl/certs/master.key\n"] as $port => $tls) {
+            $site .= "<VirtualHost *:{$port}>\n{$tls}    ServerName {$host}\n    DocumentRoot {$root}\n"
+                . "    <Directory \"{$root}/\">\n        AllowOverride All\n        Require all granted\n        FallbackResource /index.php\n    </Directory>\n"
+                . "    SetEnvIf X-Forwarded-Proto \"https\" HTTPS=on\n{$environment}    ErrorLog /dev/stdout\n</VirtualHost>\n";
+        }
+
+        file_put_contents(sprintf(self::SITE, $this->slot->number), $site);
+        ProcessRunner::mustRun('Reloading the web server', ['sudo', 'apache2ctl', 'graceful'], '/');
+
+        return 'https://' . $host;
     }
 
     /**
