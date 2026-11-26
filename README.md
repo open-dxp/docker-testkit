@@ -106,9 +106,13 @@ through `webServer` in its `playwright.config.ts`. The run hands it these variab
 
 The backend gets `E2E_HOST`, the host of the frontend, so a story can give a site that host.
 
-A slot is served with its own PHP version, also when the web server runs another one. A frontend
-build needs memory: when the kernel ends a process for lack of it, `e2e` says so, and `memory` in
-`.ddev/testkit.yaml` has to grow.
+A slot is served with its own PHP version, also when the web server runs another one.
+
+The default of 4g for `memory` in `.ddev/testkit.yaml` is enough for tests and static checks. A
+frontend build is not: the production build of a Next.js 16 frontend took 4.3 to 5 GB of its own
+memory, with Turbopack and with webpack. `e2e` needs at least `memory: 6g`, and `8g` leaves room
+for a test run beside it, since every slot shares the memory of the container. Run `ddev restart`
+after the change. When the kernel ends a process for lack of memory, `e2e` says so.
 
 ## Variables of a project
 

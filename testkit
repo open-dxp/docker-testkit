@@ -128,6 +128,15 @@ case $command in
         exit_code=0
         in_container "$command" "$key" --tag "$tag" --run "$run_id" "$@" || exit_code=$?
 
+        # The results of a frontend suite go to its checkout, which ignores them.
+        if [ "$command" = e2e ]; then
+            for results in test-results playwright-report; do
+                if [ -d "$testkit/app/sources/$key-frontend/$results" ]; then
+                    rsync -a --delete "$testkit/app/sources/$key-frontend/$results/" "$frontend/$results/"
+                fi
+            done
+        fi
+
         if [ $exit_code -eq 0 ] && [[ " $* " == *" --baseline "* ]]; then
             copy_baselines_back "$testkit/app/sources/$key" "$target" "$written_after"
         fi

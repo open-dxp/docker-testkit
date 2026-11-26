@@ -105,14 +105,22 @@ function runEndToEnd(Configuration $configuration, Slots $slots, string $key, Ar
     return runInSlot($configuration, $slots, $key, 'test', $arguments, static function (SlotApplication $application) use ($configuration, $frontend, $playwrightArguments): int {
         serveApplication($application);
         $killedBefore = countKilledForMemory();
+        $directory = $application->prepareFrontend($frontend);
 
         $exitCode = ProcessRunner::run(
             // Node sees every CPU of the machine. Kept to the CPUs of the container, the build of a frontend needs
             // less memory and leaves the other slots their share.
             ['taskset', '-c', '0-' . max(0, (int) ceil($configuration->cpus) - 1), 'npx', 'playwright', 'test', '--reporter=line', ...$playwrightArguments],
-            $application->prepareFrontend($frontend),
+            $directory,
             $application->frontendEnvironment(),
         );
+
+        // The results go back with the copy, so the shell hands them to the checkout of the frontend.
+        foreach (['test-results', 'playwright-report'] as $results) {
+            if (is_dir($directory . '/' . $results)) {
+                ProcessRunner::run(['rsync', '-a', '--delete', $directory . '/' . $results . '/', $frontend . '/' . $results . '/'], '/');
+            }
+        }
 
         if (countKilledForMemory() > $killedBefore) {
             fprintf(STDERR, "The container ran out of memory and the kernel ended a process, such as the build of the frontend. Raise memory in .ddev/testkit.yaml (now %s) and run ddev restart.\n", $configuration->memory);
