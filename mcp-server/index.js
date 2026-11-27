@@ -53,7 +53,8 @@ const TOOLS = [
             type: 'object',
             properties: {
                 path: location,
-                filter: {type: 'string', description: 'A test file below tests/ or a --filter expression. Leave out to run everything.'},
+                file: {type: 'string', description: 'A test file or directory below tests/. Leave out to run the test suite.'},
+                filter: {type: 'string', description: 'A --filter expression, such as a part of a test name or of a dataset name. It narrows the file when one is given.'},
                 php,
                 database,
                 fresh: {type: 'boolean', description: 'Build the slot again from nothing, for example after a dependency was released.'},
@@ -135,6 +136,10 @@ function testkit(args, environment = {}) {
     return {text: output || 'The testkit produced no output.', isError: result.status !== 0};
 }
 
+function refuse(text) {
+    return {text, isError: true};
+}
+
 function slotOptions({php, database, fresh}) {
     return [
         ...(php ? ['--php', php] : []),
@@ -144,10 +149,13 @@ function slotOptions({php, database, fresh}) {
 }
 
 const handlers = {
-    run_tests: ({path, filter, seed, ...rest}) => testkit([
-        'test', path, ...slotOptions(rest), '--', '--colors=never',
-        ...(filter ? (filter.startsWith('tests/') ? [filter] : ['--filter', filter]) : []),
-    ], seed === undefined ? {} : {FOUNDRY_FAKER_SEED: String(seed)}),
+    run_tests: ({path, file, filter, seed, ...rest}) => filter?.startsWith('tests/')
+        ? refuse(`"${filter}" is a file. Name it under file, and keep filter for a part of a test name.`)
+        : testkit([
+            'test', path, ...slotOptions(rest), '--', '--colors=never',
+            ...(file ? [file] : []),
+            ...(filter ? ['--filter', filter] : []),
+        ], seed === undefined ? {} : {FOUNDRY_FAKER_SEED: String(seed)}),
     run_analysis: ({path, check, baseline, ...rest}) => testkit([
         'analyse', path, ...(check ? [check] : []), ...(baseline ? ['--baseline'] : []), ...slotOptions(rest),
     ]),
